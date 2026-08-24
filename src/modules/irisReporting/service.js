@@ -5,6 +5,8 @@ const { IrisReportingRequirement } = require("./model");
 const defaultRequirements          = require("./defaultData");
 const { buildIrisReportingSummary }= require("./summary");
 const { validateRequirement, applyMaterialityRules } = require("./businessRules");
+const { logActivity } = require("../activityLog/service");
+const { ACTIVITY_ACTIONS } = require("../activityLog/model");
 
 // ─── Cloudinary setup ─────────────────────────────────────────────────────────
 const cloudinary = require("cloudinary").v2;
@@ -76,7 +78,7 @@ const getReportPack = async ({ workspaceId }) => {
 };
 
 // ─── Create Requirement ───────────────────────────────────────────────────────
-const createRequirement = async ({ workspaceId, payload }) => {
+const createRequirement = async ({ workspaceId, payload, actor }) => {
   // Apply materiality auto-rules before validation
   applyMaterialityRules(payload);
 
@@ -110,11 +112,22 @@ const createRequirement = async ({ workspaceId, payload }) => {
       status: "pending",
     })),
   });
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.CREATE_IRIS_REQUIREMENT,
+    entityType: "iris_requirement",
+    entityId: requirement._id,
+    message: `${actor?.name || actor?.email || "Someone"} created IRIS obligation "${requirement.title}"`,
+    data: { title: requirement.title, status: requirement.status, materiality: requirement.materiality },
+  });
+
   return serializeRequirement(requirement.toObject());
 };
 
 // ─── Update Requirement ───────────────────────────────────────────────────────
-const updateRequirement = async ({ workspaceId, requirementId, payload }) => {
+const updateRequirement = async ({ workspaceId, requirementId, payload, actor }) => {
   const req = await IrisReportingRequirement.findOne({ _id: requirementId, workspaceId });
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
 
@@ -152,18 +165,40 @@ const updateRequirement = async ({ workspaceId, requirementId, payload }) => {
   }
 
   await req.save();
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.UPDATE_IRIS_REQUIREMENT,
+    entityType: "iris_requirement",
+    entityId: req._id,
+    message: `${actor?.name || actor?.email || "Someone"} updated IRIS obligation "${req.title}"`,
+    data: { title: req.title, status: req.status },
+  });
+
   return serializeRequirement(req.toObject());
 };
 
 // ─── Delete Requirement ───────────────────────────────────────────────────────
-const deleteRequirement = async ({ workspaceId, requirementId }) => {
+const deleteRequirement = async ({ workspaceId, requirementId, actor }) => {
   const req = await IrisReportingRequirement.findOneAndDelete({ _id: requirementId, workspaceId });
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.DELETE_IRIS_REQUIREMENT,
+    entityType: "iris_requirement",
+    entityId: req._id,
+    message: `${actor?.name || actor?.email || "Someone"} deleted IRIS obligation "${req.title}"`,
+    data: { title: req.title },
+  });
+
   return { id: requirementId };
 };
 
 // ─── Approval Step decision ───────────────────────────────────────────────────
-const decideApprovalStep = async ({ workspaceId, requirementId, stepId, decision, notes, decidedBy }) => {
+const decideApprovalStep = async ({ workspaceId, requirementId, stepId, decision, notes, decidedBy, actor }) => {
   if (!["approved", "rejected"].includes(decision)) {
     throw new ApiError(httpStatus.BAD_REQUEST, "decision must be 'approved' or 'rejected'");
   }
@@ -180,11 +215,22 @@ const decideApprovalStep = async ({ workspaceId, requirementId, stepId, decision
   step.notes      = notes     || "";
 
   await req.save(); // pre-save hook recalculates req.approvalStatus
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.DECIDE_IRIS_APPROVAL_STEP,
+    entityType: "iris_requirement",
+    entityId: req._id,
+    message: `${actor?.name || actor?.email || decidedBy || "Someone"} ${decision} approval step "${step.stepName}" on "${req.title}"`,
+    data: { stepName: step.stepName, decision, notes: notes || "" },
+  });
+
   return serializeRequirement(req.toObject());
 };
 
 // ─── Add Comment ─────────────────────────────────────────────────────────────
-const addComment = async ({ workspaceId, requirementId, text, authorId, authorName }) => {
+const addComment = async ({ workspaceId, requirementId, text, authorId, authorName, actor }) => {
   const req = await IrisReportingRequirement.findOne({ _id: requirementId, workspaceId });
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
 
@@ -199,11 +245,22 @@ const addComment = async ({ workspaceId, requirementId, text, authorId, authorNa
 
   await req.save();
   const added = req.comments.id(commentId);
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.ADD_IRIS_COMMENT,
+    entityType: "iris_requirement",
+    entityId: req._id,
+    message: `${actor?.name || actor?.email || authorName || "Someone"} commented on "${req.title}"`,
+    data: { commentId: added._id, text: added.text },
+  });
+
   return { _id: added._id, text: added.text, authorName: added.authorName, createdAt: added.createdAt };
 };
 
 // ─── Delete Comment ───────────────────────────────────────────────────────────
-const deleteComment = async ({ workspaceId, requirementId, commentId }) => {
+const deleteComment = async ({ workspaceId, requirementId, commentId, actor }) => {
   const req = await IrisReportingRequirement.findOne({ _id: requirementId, workspaceId });
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
 
@@ -212,11 +269,22 @@ const deleteComment = async ({ workspaceId, requirementId, commentId }) => {
 
   comment.deleteOne();
   await req.save();
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.DELETE_IRIS_COMMENT,
+    entityType: "iris_requirement",
+    entityId: req._id,
+    message: `${actor?.name || actor?.email || "Someone"} deleted a comment on "${req.title}"`,
+    data: { commentId },
+  });
+
   return { commentId };
 };
 
 // ─── Upload Evidence File ─────────────────────────────────────────────────────
-const uploadEvidenceFile = async ({ workspaceId, requirementId, fileBuffer, fileName, fileType }) => {
+const uploadEvidenceFile = async ({ workspaceId, requirementId, fileBuffer, fileName, fileType, actor }) => {
   const req = await IrisReportingRequirement.findOne({ _id: requirementId, workspaceId });
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
 
@@ -244,11 +312,21 @@ const uploadEvidenceFile = async ({ workspaceId, requirementId, fileBuffer, file
     fileSize,
     url:        fileUrl,
     publicId:   publicId || "",
-    uploadedBy: "System",
+    uploadedBy: actor?.name || actor?.email || "System",
     uploadedAt: new Date(),
   });
 
   await req.save();
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.UPLOAD_IRIS_EVIDENCE,
+    entityType: "iris_requirement",
+    entityId: req._id,
+    message: `${actor?.name || actor?.email || "Someone"} uploaded evidence "${fileName}" to "${req.title}"`,
+    data: { fileName, fileSize },
+  });
 
   return {
     fileId:     fileId.toString(),
@@ -273,7 +351,7 @@ const getEvidenceFile = async ({ workspaceId, requirementId, fileId }) => {
 };
 
 // ─── Delete Evidence File ─────────────────────────────────────────────────────
-const deleteEvidenceFile = async ({ workspaceId, requirementId, fileId }) => {
+const deleteEvidenceFile = async ({ workspaceId, requirementId, fileId, actor }) => {
   const req = await IrisReportingRequirement.findOne({ _id: requirementId, workspaceId });
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
 
@@ -288,6 +366,17 @@ const deleteEvidenceFile = async ({ workspaceId, requirementId, fileId }) => {
 
   req.evidenceFiles = req.evidenceFiles.filter((f) => f._id.toString() !== fileId);
   await req.save();
+
+  await logActivity({
+    workspaceId,
+    actor,
+    action: ACTIVITY_ACTIONS.DELETE_IRIS_EVIDENCE,
+    entityType: "iris_requirement",
+    entityId: req._id,
+    message: `${actor?.name || actor?.email || "Someone"} deleted evidence "${file?.fileName || fileId}" from "${req.title}"`,
+    data: { fileName: file?.fileName || null, fileId },
+  });
+
   return { fileId };
 };
 

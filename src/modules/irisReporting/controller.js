@@ -17,7 +17,7 @@ const getReportPack = catchAsync(async (req, res) => {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 const createRequirement = catchAsync(async (req, res) => {
-  const requirement = await svc.createRequirement({ workspaceId: workspaceId(req), payload: req.body });
+  const requirement = await svc.createRequirement({ workspaceId: workspaceId(req), payload: req.body, actor: req.user });
   res.status(httpStatus.CREATED).json({ success: true, requirement });
 });
 
@@ -26,12 +26,13 @@ const updateRequirement = catchAsync(async (req, res) => {
     workspaceId:   workspaceId(req),
     requirementId: req.params.requirementId,
     payload:       req.body,
+    actor:         req.user,
   });
   res.status(httpStatus.OK).json({ success: true, requirement });
 });
 
 const deleteRequirement = catchAsync(async (req, res) => {
-  const result = await svc.deleteRequirement({ workspaceId: workspaceId(req), requirementId: req.params.requirementId });
+  const result = await svc.deleteRequirement({ workspaceId: workspaceId(req), requirementId: req.params.requirementId, actor: req.user });
   res.status(httpStatus.OK).json({ success: true, ...result });
 });
 
@@ -44,6 +45,7 @@ const decideApprovalStep = catchAsync(async (req, res) => {
   const requirement = await svc.decideApprovalStep({
     workspaceId: workspaceId(req),
     requirementId, stepId, decision, notes, decidedBy,
+    actor: req.user,
   });
   res.status(httpStatus.OK).json({ success: true, requirement });
 });
@@ -61,13 +63,14 @@ const addComment = catchAsync(async (req, res) => {
     text,
     authorId:   req.user?._id?.toString(),
     authorName: req.user?.name || req.user?.email || "Unknown",
+    actor:      req.user,
   });
   res.status(httpStatus.CREATED).json({ success: true, comment });
 });
 
 const deleteComment = catchAsync(async (req, res) => {
   const { requirementId, commentId } = req.params;
-  const result = await svc.deleteComment({ workspaceId: workspaceId(req), requirementId, commentId });
+  const result = await svc.deleteComment({ workspaceId: workspaceId(req), requirementId, commentId, actor: req.user });
   res.status(httpStatus.OK).json({ success: true, ...result });
 });
 
@@ -83,6 +86,7 @@ const uploadEvidenceFile = catchAsync(async (req, res) => {
     fileBuffer:    buffer,
     fileName:      originalname,
     fileType:      mimetype,
+    actor:         req.user,
   });
   res.status(httpStatus.OK).json({ success: true, file: result });
 });
@@ -101,6 +105,7 @@ const deleteEvidenceFile = catchAsync(async (req, res) => {
     workspaceId:   workspaceId(req),
     requirementId: req.params.requirementId,
     fileId:        req.params.fileId,
+    actor:         req.user,
   });
   res.status(httpStatus.OK).json({ success: true, ...result });
 });

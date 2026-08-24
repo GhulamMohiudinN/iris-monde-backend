@@ -20,9 +20,19 @@ const ACTIVITY_ACTIONS = {
     CREATE_STEP: 'create_step',
     UPDATE_STEP: 'update_step',
     DELETE_STEP: 'delete_step',
+
+    // IRIS Reporting
+    CREATE_IRIS_REQUIREMENT: 'create_iris_requirement',
+    UPDATE_IRIS_REQUIREMENT: 'update_iris_requirement',
+    DELETE_IRIS_REQUIREMENT: 'delete_iris_requirement',
+    UPLOAD_IRIS_EVIDENCE: 'upload_iris_evidence',
+    DELETE_IRIS_EVIDENCE: 'delete_iris_evidence',
+    DECIDE_IRIS_APPROVAL_STEP: 'decide_iris_approval_step',
+    ADD_IRIS_COMMENT: 'add_iris_comment',
+    DELETE_IRIS_COMMENT: 'delete_iris_comment',
 };
 
-const ACTIVITY_ENTITY_TYPES = ['workspace', 'process', 'step', 'user'];
+const ACTIVITY_ENTITY_TYPES = ['workspace', 'process', 'step', 'user', 'iris_requirement'];
 
 const activityLogSchema = new mongoose.Schema(
     {
