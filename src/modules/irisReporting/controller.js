@@ -127,6 +127,16 @@ const validateRequirement = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).json({ success: true, ...result });
 });
 
+// ── Bulk Import from Legislation Library ──────────────────────────────────────
+const bulkImportFromLibrary = catchAsync(async (req, res) => {
+  const result = await svc.bulkImportFromLibrary({
+    workspaceId: workspaceId(req),
+    refs:        Array.isArray(req.body?.refs) ? req.body.refs : null,
+    actor:       req.user,
+  });
+  res.status(httpStatus.OK).json({ success: true, ...result });
+});
+
 module.exports = {
   getOverview, getReportPack,
   createRequirement, updateRequirement, deleteRequirement,
@@ -135,4 +145,5 @@ module.exports = {
   uploadEvidenceFile, downloadEvidenceFile, deleteEvidenceFile,
   getLegislationLibrary,
   validateRequirement,
+  bulkImportFromLibrary,
 };

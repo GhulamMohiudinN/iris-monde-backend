@@ -419,6 +419,78 @@ const getLegislationLibrary = async () => {
   }
 };
 
+// ─── Bulk Import from Legislation Library ────────────────────────────────────
+// Turns every (or a selected set of) legislation library entries into real
+// obligations for this workspace in one shot, instead of the user re-typing
+// each one by hand. Safe to re-run — entries already present (matched by
+// legislationRef) are skipped, never duplicated.
+const bulkImportFromLibrary = async ({ workspaceId, refs, actor }) => {
+  const library = await getLegislationLibrary();
+
+  const source = Array.isArray(refs) && refs.length
+    ? library.filter((item) => refs.includes(item.ref))
+    : library;
+
+  if (!source.length) {
+    return { imported: 0, skipped: 0, total: 0 };
+  }
+
+  const existing = await IrisReportingRequirement.find(
+    { workspaceId, legislationRef: { $in: source.map((s) => s.ref) } },
+    { legislationRef: 1 }
+  ).lean();
+  const existingRefs = new Set(existing.map((e) => e.legislationRef));
+
+  const toInsert = source
+    .filter((item) => item.ref && !existingRefs.has(item.ref))
+    .map((item) => {
+      const draft = {
+        materiality: item.defaultMateriality || "Standard",
+        approvalRequired: undefined,
+      };
+      applyMaterialityRules(draft);
+
+      return {
+        workspaceId,
+        title:              item.title || item.ref,
+        source:             item.source || "Legislation library",
+        legislationRef:     item.ref,
+        category:           item.category || "Reporting",
+        obligationType:     item.obligationType || "reporting",
+        status:             "planned",
+        owner:              "",
+        reportType:         "Statutory report",
+        materiality:        draft.materiality,
+        approvalRequired:   Boolean(draft.approvalRequired),
+        evidenceRequired:   [],
+        details:            `Imported from the legislation library (${item.source || "reference library"}).`,
+        legislationVersion: "",
+        ruleVersion:        "1.0",
+        reportingPeriod:    "",
+      };
+    });
+
+  const inserted = toInsert.length ? await IrisReportingRequirement.insertMany(toInsert) : [];
+
+  if (inserted.length) {
+    await logActivity({
+      workspaceId,
+      actor,
+      action: ACTIVITY_ACTIONS.CREATE_IRIS_REQUIREMENT,
+      entityType: "iris_requirement",
+      entityId: null,
+      message: `${actor?.name || actor?.email || "Someone"} imported ${inserted.length} obligation${inserted.length === 1 ? "" : "s"} from the legislation library`,
+      data: { count: inserted.length, refs: inserted.map((r) => r.legislationRef) },
+    });
+  }
+
+  return {
+    imported: inserted.length,
+    skipped:  source.length - toInsert.length,
+    total:    source.length,
+  };
+};
+
 module.exports = {
   getOverview,
   getReportPack,
@@ -433,4 +505,5 @@ module.exports = {
   deleteEvidenceFile,
   validateOnly,
   getLegislationLibrary,
+  bulkImportFromLibrary,
 };

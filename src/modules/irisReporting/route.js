@@ -27,6 +27,9 @@ router
   .patch("/requirements/:requirementId",      ...guard, ctrl.updateRequirement)
   .delete("/requirements/:requirementId",     ...guard, ctrl.deleteRequirement)
 
+  // Bulk import obligations from the legislation library
+  .post("/requirements/bulk-import",          ...guard, ctrl.bulkImportFromLibrary)
+
   // Dry-run validation
   .post("/requirements/validate",                          ...guard, ctrl.validateRequirement)
   .post("/requirements/:requirementId/validate",           ...guard, ctrl.validateRequirement)
