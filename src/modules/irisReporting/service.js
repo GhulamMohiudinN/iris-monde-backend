@@ -7,6 +7,9 @@ const { buildIrisReportingSummary }= require("./summary");
 const { validateRequirement, applyMaterialityRules } = require("./businessRules");
 const { logActivity } = require("../activityLog/service");
 const { ACTIVITY_ACTIONS } = require("../activityLog/model");
+const { sendEmail } = require("../../services/email.service");
+
+const REMINDER_WINDOW_DAYS = 3;
 
 // ─── Cloudinary setup ─────────────────────────────────────────────────────────
 const cloudinary = require("cloudinary").v2;
@@ -98,6 +101,7 @@ const createRequirement = async ({ workspaceId, payload, actor }) => {
     status:             payload.status             || "planned",
     dueDate:            normalizeDueDate(payload.dueDate),
     owner:              payload.owner              || "Operations",
+    ownerEmail:         payload.ownerEmail          || "",
     reportType:         payload.reportType         || "Statutory report",
     materiality:        payload.materiality        || "Standard",
     approvalRequired:   Boolean(payload.approvalRequired),
@@ -147,12 +151,18 @@ const updateRequirement = async ({ workspaceId, requirementId, payload, actor })
 
   const fields = [
     "title", "source", "legislationRef", "category", "obligationType",
-    "status", "owner", "reportType", "materiality", "details",
+    "status", "owner", "ownerEmail", "reportType", "materiality", "details",
     "legislationVersion", "ruleVersion", "reportingPeriod",
   ];
   fields.forEach((f) => { if (payload[f] !== undefined) req[f] = payload[f]; });
 
-  if (payload.dueDate          !== undefined) req.dueDate          = normalizeDueDate(payload.dueDate);
+  if (payload.dueDate !== undefined) {
+    const nextDueDate = normalizeDueDate(payload.dueDate);
+    // Due date pushed out (or set for the first time) — allow a fresh reminder later.
+    const changed = (nextDueDate?.getTime() || null) !== (req.dueDate?.getTime() || null);
+    req.dueDate = nextDueDate;
+    if (changed) req.reminderSentAt = null;
+  }
   if (payload.approvalRequired !== undefined) req.approvalRequired = Boolean(payload.approvalRequired);
   if (payload.evidenceRequired !== undefined) req.evidenceRequired = Array.isArray(payload.evidenceRequired) ? payload.evidenceRequired.filter(Boolean) : [];
 
@@ -491,6 +501,53 @@ const bulkImportFromLibrary = async ({ workspaceId, refs, actor }) => {
   };
 };
 
+// ─── Due-date reminder emails ──────────────────────────────────────────────────
+// Runs across every workspace (triggered by a scheduled cron hit, not a user
+// request). Emails the linked owner once per obligation, the first time it
+// enters the "due within REMINDER_WINDOW_DAYS days" window — never repeats.
+const sendDueDateReminders = async () => {
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + REMINDER_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const due = await IrisReportingRequirement.find({
+    status:         { $ne: "completed" },
+    ownerEmail:     { $exists: true, $nin: ["", null] },
+    dueDate:        { $ne: null, $lte: windowEnd },
+    reminderSentAt: null,
+  });
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const item of due) {
+    try {
+      const overdue = item.dueDate < now;
+      const dueStr = new Date(item.dueDate).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
+      const subject = overdue
+        ? `Overdue: ${item.title}`
+        : `Reminder: ${item.title} is due ${dueStr}`;
+      const text =
+        `Hi ${item.owner || "there"},\n\n` +
+        `This is a reminder that the obligation "${item.title}"` +
+        `${item.legislationRef ? ` (${item.legislationRef})` : ""} is ` +
+        `${overdue ? "overdue" : `due on ${dueStr}`}.\n\n` +
+        `Please log in to IRIS Workspace to review and update its status.\n\n` +
+        `— IRIS Workspace`;
+
+      await sendEmail(item.ownerEmail, subject, text);
+
+      item.reminderSentAt = now;
+      await item.save();
+      sent++;
+    } catch (err) {
+      console.error(`[IRIS] Failed to send due-date reminder for ${item._id}:`, err.message);
+      failed++;
+    }
+  }
+
+  return { checked: due.length, sent, failed };
+};
+
 module.exports = {
   getOverview,
   getReportPack,
@@ -506,4 +563,5 @@ module.exports = {
   validateOnly,
   getLegislationLibrary,
   bulkImportFromLibrary,
+  sendDueDateReminders,
 };

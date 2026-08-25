@@ -137,6 +137,12 @@ const bulkImportFromLibrary = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).json({ success: true, ...result });
 });
 
+// ── Due-date reminders (cron-triggered, no logged-in user) ────────────────────
+const sendDueDateReminders = catchAsync(async (req, res) => {
+  const result = await svc.sendDueDateReminders();
+  res.status(httpStatus.OK).json({ success: true, ...result });
+});
+
 module.exports = {
   getOverview, getReportPack,
   createRequirement, updateRequirement, deleteRequirement,
@@ -146,4 +152,5 @@ module.exports = {
   getLegislationLibrary,
   validateRequirement,
   bulkImportFromLibrary,
+  sendDueDateReminders,
 };

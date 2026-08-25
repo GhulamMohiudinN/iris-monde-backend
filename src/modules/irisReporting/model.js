@@ -69,10 +69,18 @@ const irisRequirementSchema = new mongoose.Schema(
     status:         { type: String, enum: IRIS_STATUS, default: "planned" },
     dueDate:        { type: Date, default: null },
     owner:          { type: String, default: "Operations", trim: true },
+    // Set only when Owner is picked from the real workspace-member list —
+    // needed to actually send due-date reminder emails. Free-typed owners
+    // (e.g. a role title) leave this empty and simply don't get reminders.
+    ownerEmail:      { type: String, default: "", trim: true, lowercase: true },
     reportType:     { type: String, default: "Statutory report", trim: true },
     materiality:    { type: String, enum: MATERIALITY, default: "Standard" },
     approvalRequired: { type: Boolean, default: false },
     details:        { type: String, default: "", trim: true },
+
+    // Due-date reminder tracking — set once a reminder email has gone out,
+    // so the daily cron never emails the same owner twice for one obligation.
+    reminderSentAt: { type: Date, default: null },
 
     // Evidence
     evidenceRequired: [{ type: String, trim: true }],

@@ -55,6 +55,7 @@ module.exports = {
     addMemberExpirationMinutes: process.env.JWT_ADD_MEMBER_EXPIRATION_MINUTES,
   },
   email: {
+    from: process.env.EMAIL_FROM || process.env.SMTP_USERNAME,
     smtp: {
       host: process.env.SMTP_HOST,
       port: process.env.SMTP_PORT,
