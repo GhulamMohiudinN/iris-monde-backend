@@ -54,6 +54,10 @@ module.exports = {
       process.env.JWT_VERIFY_EMAIL_EXPIRATION_MINUTES,
     addMemberExpirationMinutes: process.env.JWT_ADD_MEMBER_EXPIRATION_MINUTES,
   },
+  ai: {
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    geminiModel:  process.env.GEMINI_MODEL || "gemini-3.6-flash",
+  },
   email: {
     from: process.env.EMAIL_FROM || process.env.SMTP_USERNAME,
     smtp: {

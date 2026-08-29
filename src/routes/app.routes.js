@@ -7,6 +7,9 @@ const step = require("../modules/step/route");
 const activityLog = require("../modules/activityLog/route");
 const template = require("../modules/template/route");
 const irisReporting = require("../modules/irisReporting/route");
+const invoice = require("../modules/invoice/route");
+const reportTemplate = require("../modules/reportTemplate/route");
+const ai = require("../modules/ai/route");
 
 module.exports = (app) => {
   const apiV1Router = express.Router();
@@ -18,6 +21,9 @@ module.exports = (app) => {
   apiV1Router.use("/activity-log", activityLog);
   apiV1Router.use("/template", template);
   apiV1Router.use("/iris-reporting", irisReporting);
+  apiV1Router.use("/invoices", invoice);
+  apiV1Router.use("/report-templates", reportTemplate);
+  apiV1Router.use("/ai", ai);
 
   app.use("/api/v1", apiV1Router);
 };
