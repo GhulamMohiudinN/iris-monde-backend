@@ -1,3 +1,8 @@
+// Some networks resolve IPv6 addresses for Google APIs (Gemini, etc.) that
+// aren't actually routable, and Node <20's fetch doesn't fall back to IPv4
+// the way curl/browsers do — causing outbound calls to hang and time out.
+require("dns").setDefaultResultOrder("ipv4first");
+
 const mongoose = require("mongoose");
 const { createServer } = require("http");
 const { Server } = require("socket.io");

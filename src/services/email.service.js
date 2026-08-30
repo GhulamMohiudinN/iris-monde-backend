@@ -39,7 +39,7 @@ const sendAddMemberInvitation = async ({
   to,
   adminName,
   workspaceName,
-  appName = "Workflow",
+  appName = "Iris Monde",
   token,
 }) => {
   const templatePath = path.join(__dirname, "../email_template/addMember.html");

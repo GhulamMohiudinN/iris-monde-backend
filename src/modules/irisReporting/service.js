@@ -530,8 +530,8 @@ const sendDueDateReminders = async () => {
         `This is a reminder that the obligation "${item.title}"` +
         `${item.legislationRef ? ` (${item.legislationRef})` : ""} is ` +
         `${overdue ? "overdue" : `due on ${dueStr}`}.\n\n` +
-        `Please log in to IRIS Workspace to review and update its status.\n\n` +
-        `— IRIS Workspace`;
+        `Please log in to Iris Monde to review and update its status.\n\n` +
+        `— Iris Monde`;
 
       await sendEmail(item.ownerEmail, subject, text);
 
