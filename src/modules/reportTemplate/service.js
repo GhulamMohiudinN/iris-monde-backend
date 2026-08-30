@@ -18,9 +18,10 @@ if (process.env.CLOUDINARY_URL) {
     api_secret: process.env.CLOUDINARY_API_SECRET,
   });
 }
-const isCloudinaryReady = () => !!(
-  process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET
-);
+const isCloudinaryReady = () => {
+  const resolved = cloudinary.config();
+  return !!(resolved.cloud_name && resolved.api_key && resolved.api_secret);
+};
 
 const MIME_BY_TYPE = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
