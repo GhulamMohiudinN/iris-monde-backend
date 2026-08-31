@@ -52,8 +52,43 @@ const createUser = async (userBody) => {
 };
 
 const createSignUpUser = async ({ email, name, password }) => {
-    if (await User.isEmailTaken(email)) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+    const existing = await User.findOne({ email });
+
+    if (existing) {
+        // Already fully onboarded — nothing to resume, just sign in.
+        if (existing.workspaceId) {
+            throw new ApiError(httpStatus.BAD_REQUEST, 'An account with this email already exists. Please sign in.');
+        }
+
+        // Verified but the workspace-setup wizard was never finished (tab
+        // closed, browser crashed, etc.) — the account and password already
+        // work, so send them to sign in and resume instead of signing up again.
+        if (existing.isEmailVerified) {
+            throw new ApiError(httpStatus.BAD_REQUEST, 'This email is already verified. Please sign in to finish setting up your workspace.');
+        }
+
+        // Signed up but never clicked the verification link — safe to let
+        // them resume: overwrite the stale, unverified record instead of
+        // permanently blocking the email forever.
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const verifyMinutes = Number(config.jwt.verifyEmailExpirationMinutes) || 60;
+        const resetTokenExpiry = new Date(Date.now() + verifyMinutes * 60 * 1000);
+
+        existing.name = name;
+        existing.password = password;
+        existing.resetToken = resetToken;
+        existing.resetTokenExpiry = resetTokenExpiry;
+        await existing.save();
+
+        await emailService.sendVerificationEmail(email, resetToken);
+
+        return {
+            id: existing._id,
+            name: existing.name,
+            email: existing.email,
+            username: existing.username,
+            isEmailVerified: existing.isEmailVerified,
+        };
     }
 
     const username = await generateUniqueUsername(name);
