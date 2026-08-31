@@ -55,6 +55,7 @@ const uploadTemplate = async ({ workspaceId, fileBuffer, fileName, actor }) => {
     name: fileName.replace(/\.(docx|xlsx)$/i, ""),
     fileType: ext,
     fileName,
+    fileSize: fileBuffer.length,
     url,
     publicId,
     uploadedBy: actor?.name || actor?.email || "",

@@ -4,6 +4,32 @@ const { Process } = require('../process/model');
 const { ActivityLog } = require('../activityLog/model');
 const { Template } = require('../template/model');
 const DEFAULT_TEMPLATES = require('../template/defaultTemplates');
+const { IrisReportingRequirement } = require('../irisReporting/model');
+const { ReportTemplate } = require('../reportTemplate/model');
+
+// Shared plan cap shown in the UI (e.g. sidebar "x GB of 10 GB used").
+// No per-workspace plan/billing tiers exist yet, so every workspace is
+// measured against this same limit until that's built.
+const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
+
+const getWorkspaceStorageUsage = async (workspaceId) => {
+    const [evidenceAgg, templateAgg] = await Promise.all([
+        IrisReportingRequirement.aggregate([
+            { $match: { workspaceId } },
+            { $unwind: { path: '$evidenceFiles', preserveNullAndEmptyArrays: false } },
+            { $group: { _id: null, bytes: { $sum: '$evidenceFiles.fileSize' } } },
+        ]),
+        ReportTemplate.aggregate([
+            { $match: { workspaceId } },
+            { $group: { _id: null, bytes: { $sum: '$fileSize' } } },
+        ]),
+    ]);
+
+    const usedBytes = (evidenceAgg[0]?.bytes || 0) + (templateAgg[0]?.bytes || 0);
+    const percent = Math.min(100, Math.round((usedBytes / STORAGE_LIMIT_BYTES) * 100));
+
+    return { usedBytes, limitBytes: STORAGE_LIMIT_BYTES, percent };
+};
 
 const generateWorkspaceCode = async (companyName = 'company') => {
     const base = (companyName || 'company')
@@ -158,7 +184,7 @@ const removeMemberFromWorkspace = async () => {
 };
 
 const getWorkspaceOverview = async ({ workspaceId }) => {
-    const [members, activeProcesses, pendingProcesses, completedProcesses, recentActivities] = await Promise.all([
+    const [members, activeProcesses, pendingProcesses, completedProcesses, recentActivities, storage] = await Promise.all([
         User.find({ workspaceId })
             .select('name email role userType invitationStatus profilePicture lastActive createdAt')
             .lean(),
@@ -179,9 +205,11 @@ const getWorkspaceOverview = async ({ workspaceId }) => {
             .limit(5)
             .populate('userId', 'name email profilePicture')
             .lean(),
+        getWorkspaceStorageUsage(workspaceId),
     ]);
 
     return {
+        storage,
         members: {
             total: members.length,
             // data: members,

@@ -11,6 +11,7 @@ const reportTemplateSchema = new mongoose.Schema(
     name:       { type: String, required: true, trim: true },
     fileType:   { type: String, enum: ["docx", "xlsx"], required: true },
     fileName:   { type: String, required: true },
+    fileSize:   { type: Number, default: 0 }, // bytes — used for real workspace storage usage
     url:        { type: String, required: true }, // Cloudinary secure_url or base64 data URI (dev fallback)
     publicId:   { type: String, default: "" },
     uploadedBy: { type: String, default: "" },
