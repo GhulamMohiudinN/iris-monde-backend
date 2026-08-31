@@ -4,11 +4,9 @@ dotenv.config({ override: true });
 
 const normalizeUrl = (value) => {
   if (typeof value !== "string") return undefined;
-  return value
-    .trim()
-    .replace(/\s+$/g, "")
-    .replace(/\/+/g, "/")
-    .replace(/\/\/+/g, "/");
+  // Trim whitespace and strip only trailing slash(es) — must NOT touch the
+  // "://" after the protocol, or every URL built from this breaks.
+  return value.trim().replace(/\/+$/, "");
 };
 
 const normalizeMongoUrl = (value) => {

@@ -1,63 +1,65 @@
 <!DOCTYPE html>
 <html>
-  <body style="margin:0; padding:0; background:#f5f7fa; font-family:Arial, sans-serif;">
-    <table width="100%" bgcolor="#f5f7fa" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+  <body style="margin:0; padding:0; background:#f6f8fb; font-family:Arial, sans-serif;">
+    <table width="100%" bgcolor="#f6f8fb" cellpadding="0" cellspacing="0" style="padding:40px 0;">
       <tr>
         <td align="center">
-          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:10px; padding:40px; box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+          <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(15,23,42,0.08);">
+
+            <!-- Header / logo -->
             <tr>
-              <td align="center" style="padding-bottom:20px;">
-                <h2 style="color:#333333; margin:0; font-size:28px; font-weight:700;">
-                  {{appName}} — Workspace Invitation
-                </h2>
+              <td align="center" style="background:#111827; padding:28px 40px;">
+                <img src="{{logoUrl}}" alt="{{appName}}" width="44" height="44" style="border-radius:9px; display:block; margin:0 auto;" />
+                <div style="margin-top:12px; color:#ffffff; font-size:17px; font-weight:700; letter-spacing:0.2px;">{{appName}}</div>
+                <div style="color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:2px; margin-top:2px;">Workspace Invitation</div>
               </td>
             </tr>
 
+            <!-- Body -->
             <tr>
-              <td style="color:#555555; font-size:16px; line-height:26px;">
-                <p style="margin:0 0 20px 0;">
+              <td style="padding:36px 40px 8px 40px; color:#475569; font-size:14px; line-height:22px;">
+                <p style="margin:0 0 18px 0;">
                   Hello,
                 </p>
 
-                <p style="margin:0 0 20px 0;">
-                  <strong>{{adminName}}</strong> has invited you to join the 
-                  <strong>{{workspaceName}}</strong> workspace on <strong>{{appName}}</strong>.
+                <p style="margin:0 0 18px 0;">
+                  <strong style="color:#111827;">{{adminName}}</strong> has invited you to join the
+                  <strong style="color:#111827;">{{workspaceName}}</strong> workspace on <strong style="color:#111827;">{{appName}}</strong>.
                 </p>
 
-                <p style="margin:0 0 20px 0;">
-                  This workspace may include shared tasks, team collaboration, real-time updates, and many more productivity tools that make your workflow easier and faster.
+                <p style="margin:0 0 18px 0;">
+                  This workspace includes shared processes, obligation tracking, compliance reporting and real-time team updates.
                 </p>
 
                 <p style="margin:20px 0;">
                   To accept the invitation and join the workspace, simply click the button below:
                 </p>
 
-                <div style="text-align:center; margin:30px 0;">
-                  <a href="{{inviteUrl}}" 
-                    style="background:#4a6cf7; color:#ffffff; padding:14px 28px; border-radius:6px; text-decoration:none; font-weight:bold; font-size:16px; display:inline-block;">
+                <div style="text-align:center; margin:28px 0;">
+                  <a href="{{inviteUrl}}"
+                    style="background:#2563eb; color:#ffffff; padding:13px 32px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px; display:inline-block;">
                     Join Workspace
                   </a>
                 </div>
 
-                <p style="margin:20px 0; color:#666666; font-size:14px;">
-                  If the button above doesn’t work, copy and paste the link below into your browser:
+                <p style="margin:20px 0 0 0; color:#94a3b8; font-size:12px; line-height:20px;">
+                  If the button above doesn&rsquo;t work, copy and paste the link below into your browser:
                 </p>
 
-                <p style="word-break:break-all; font-size:14px; color:#4a6cf7;">
+                <p style="word-break:break-all; font-size:12px; color:#2563eb; margin:6px 0 0 0;">
                   {{inviteUrl}}
                 </p>
 
-                <p style="margin-top:30px; font-size:14px; color:#777777;">
-                  If you were not expecting this invitation, simply ignore this email.
+                <p style="margin-top:28px; font-size:12px; color:#94a3b8; line-height:18px;">
+                  If you were not expecting this invitation, you can safely ignore this email.
                 </p>
               </td>
             </tr>
 
+            <!-- Footer -->
             <tr>
-              <td align="center" style="padding-top:30px;">
-                <p style="color:#999999; font-size:12px;">
-                  © {{year}} {{appName}}. All rights reserved.
-                </p>
+              <td align="center" style="padding:20px 40px 28px 40px; border-top:1px solid #e2e8f0;">
+                <p style="color:#94a3b8; font-size:11px; margin:16px 0 0 0;">&copy; {{year}} {{appName}}. All rights reserved.</p>
               </td>
             </tr>
 
