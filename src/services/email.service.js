@@ -86,10 +86,36 @@ const sendAddMemberInvitation = async ({
   });
 };
 
+const sendContractSignRequest = async ({ to, recipientName, title, ownerName, signUrl }) => {
+  const subject = `${ownerName || "Iris Monde"} sent you a contract to sign — ${title}`;
+  const html = renderActionEmail({
+    title: "You have a contract to sign",
+    bodyText: `Hi ${recipientName || "there"}, ${ownerName || "the sender"} has sent you "${title}" to review and sign. Click below to open it — no account or download required.`,
+    buttonLabel: "Review & Sign",
+    buttonUrl: signUrl,
+    footerNote: "This link is unique to you. If you weren't expecting this, you can safely ignore this email.",
+  });
+  await transport.sendMail({ from: config.email.from, to, subject, html });
+};
+
+const sendContractSignedNotification = async ({ to, ownerName, title, signerName, contractsUrl }) => {
+  const subject = `Signed: ${title}`;
+  const html = renderActionEmail({
+    title: "Your contract has been signed",
+    bodyText: `Hi ${ownerName || "there"}, "${title}" was just signed by ${signerName}. You can view the signed copy in Iris Monde any time.`,
+    buttonLabel: "View in Iris Monde",
+    buttonUrl: contractsUrl,
+    footerNote: "This is an automatic notification — no action is needed.",
+  });
+  await transport.sendMail({ from: config.email.from, to, subject, html });
+};
+
 module.exports = {
   transport,
   sendEmail,
   sendResetPasswordEmail,
   sendVerificationEmail,
-  sendAddMemberInvitation
+  sendAddMemberInvitation,
+  sendContractSignRequest,
+  sendContractSignedNotification,
 };

@@ -30,9 +30,14 @@ const ACTIVITY_ACTIONS = {
     DECIDE_IRIS_APPROVAL_STEP: 'decide_iris_approval_step',
     ADD_IRIS_COMMENT: 'add_iris_comment',
     DELETE_IRIS_COMMENT: 'delete_iris_comment',
+
+    // Contracts
+    CREATE_CONTRACT: 'create_contract',
+    SIGN_CONTRACT: 'sign_contract',
+    CANCEL_CONTRACT: 'cancel_contract',
 };
 
-const ACTIVITY_ENTITY_TYPES = ['workspace', 'process', 'step', 'user', 'iris_requirement'];
+const ACTIVITY_ENTITY_TYPES = ['workspace', 'process', 'step', 'user', 'iris_requirement', 'contract'];
 
 const activityLogSchema = new mongoose.Schema(
     {

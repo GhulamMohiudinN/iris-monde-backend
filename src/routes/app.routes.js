@@ -10,6 +10,7 @@ const irisReporting = require("../modules/irisReporting/route");
 const invoice = require("../modules/invoice/route");
 const reportTemplate = require("../modules/reportTemplate/route");
 const ai = require("../modules/ai/route");
+const contract = require("../modules/contract/route");
 
 module.exports = (app) => {
   const apiV1Router = express.Router();
@@ -24,6 +25,7 @@ module.exports = (app) => {
   apiV1Router.use("/invoices", invoice);
   apiV1Router.use("/report-templates", reportTemplate);
   apiV1Router.use("/ai", ai);
+  apiV1Router.use("/contracts", contract);
 
   app.use("/api/v1", apiV1Router);
 };

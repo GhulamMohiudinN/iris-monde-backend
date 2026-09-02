@@ -18,7 +18,7 @@ const TOOLS = [
           properties: {
             path: {
               type: "STRING",
-              description: "One of: /dashboard, /processes, /templates, /builder, /users, /users/add, /settings, /activity-logs, /reports, /iris-reporting, /invoicing, /company",
+              description: "One of: /dashboard, /processes, /templates, /builder, /users, /users/add, /settings, /activity-logs, /reports, /iris-reporting, /invoicing, /contracts, /company",
             },
           },
           required: ["path"],
