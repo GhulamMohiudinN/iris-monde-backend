@@ -164,3 +164,33 @@ test("verification window honours the 24 hours promised on the signup screen", (
   const effective = Math.max(configured, 24 * 60);
   assert.ok(effective >= 1440, `effective verification window is ${effective} minutes`);
 });
+
+// ─── Auth token integrity ────────────────────────────────────────────────────
+// Every user in the app is authenticated by a signed JWT, and the library
+// underneath (jws) has had a real HMAC verification advisory against it. These
+// assertions fail loudly if a dependency change ever weakens signature checking.
+test("JWTs round-trip and reject tampering", () => {
+  const jwt = require("jsonwebtoken");
+  const secret = "token-integrity-test-secret";
+
+  const token = jwt.sign({ userId: "abc123" }, secret, { expiresIn: "30m" });
+  assert.equal(jwt.verify(token, secret).userId, "abc123");
+
+  const [header, payload] = token.split(".");
+
+  assert.throws(
+    () => jwt.verify(`${header}.${payload}.forged-signature`, secret),
+    "a forged signature was accepted"
+  );
+
+  assert.throws(
+    () => jwt.verify(token, "a-different-secret"),
+    "a token signed with a different secret was accepted"
+  );
+
+  const algNone = `${Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url")}.${payload}.`;
+  assert.throws(
+    () => jwt.verify(algNone, secret),
+    "an unsigned alg=none token was accepted"
+  );
+});
