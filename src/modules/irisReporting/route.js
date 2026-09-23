@@ -2,6 +2,7 @@ const express = require("express");
 const multer  = require("multer");
 const auth    = require("../../middlewares/auth");
 const { isSuperAdmin } = require("../../middlewares/auth");
+const { buildFileFilter } = require("../../utils/uploadFilter");
 const ctrl    = require("./controller");
 
 const router = express.Router();
@@ -9,6 +10,10 @@ const router = express.Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  // Mirrors the `accept` list on the evidence-upload input in the UI.
+  fileFilter: buildFileFilter([
+    "pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg", "zip", "csv",
+  ]),
 });
 
 // All IRIS routes require valid JWT + admin userType

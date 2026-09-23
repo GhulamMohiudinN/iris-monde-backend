@@ -7,6 +7,26 @@ const emailService = require('../../services/email.service');
 const jwt = require('jsonwebtoken');
 const { tokenTypes } = require('../../config/tokens');
 
+// ─── Token lifetimes ─────────────────────────────────────────────────────────
+// Treated as floors, not plain defaults, deliberately: the expiry checks below
+// were disabled for a long time, so the configured values (10 minutes) were
+// never a real policy — nothing enforced them. Now that they're enforced, a
+// 10-minute window would actively break users:
+//   • the signup screen promises "the verification link will expire in 24 hours"
+//   • an expired invite strands the invitee, because inviteTeamMember refuses
+//     to re-invite an email that already exists
+// Raising these via env still works; lowering them below the floor does not.
+const MINUTE = 60 * 1000;
+const VERIFY_EMAIL_WINDOW_MINUTES = Math.max(
+    Number(config.jwt.verifyEmailExpirationMinutes) || 0,
+    24 * 60,
+);
+const RESET_PASSWORD_WINDOW_MINUTES = Math.max(
+    Number(config.jwt.resetPasswordExpirationMinutes) || 0,
+    60,
+);
+const INVITATION_WINDOW_MINUTES = 7 * 24 * 60;
+
 async function generateToken(payload) {
     const token = jwt.sign(payload, config.secrets.jwtSecretKey, {
         expiresIn: config.secrets.jwtTokenExp,
@@ -71,8 +91,7 @@ const createSignUpUser = async ({ email, name, password }) => {
         // them resume: overwrite the stale, unverified record instead of
         // permanently blocking the email forever.
         const resetToken = crypto.randomBytes(32).toString('hex');
-        const verifyMinutes = Number(config.jwt.verifyEmailExpirationMinutes) || 60;
-        const resetTokenExpiry = new Date(Date.now() + verifyMinutes * 60 * 1000);
+        const resetTokenExpiry = new Date(Date.now() + VERIFY_EMAIL_WINDOW_MINUTES * MINUTE);
 
         existing.name = name;
         existing.password = password;
@@ -93,8 +112,7 @@ const createSignUpUser = async ({ email, name, password }) => {
 
     const username = await generateUniqueUsername(name);
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const verifyMinutes = Number(config.jwt.verifyEmailExpirationMinutes) || 60;
-    const resetTokenExpiry = new Date(Date.now() + verifyMinutes * 60 * 1000);
+    const resetTokenExpiry = new Date(Date.now() + VERIFY_EMAIL_WINDOW_MINUTES * MINUTE);
 
     const user = await User.create({
         name,
@@ -123,7 +141,7 @@ const createSignUpUser = async ({ email, name, password }) => {
 const verifyEmailToken = async (token) => {
     const user = await User.findOne({
         resetToken: token,
-        // resetTokenExpiry: { $gt: new Date() },
+        resetTokenExpiry: { $gt: new Date() },
     });
 
     if (!user) {
@@ -202,9 +220,8 @@ const createForgotPasswordToken = async (email) => {
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const expiryMinutes = Number(config.jwt.resetPasswordExpirationMinutes) || 10;
     user.resetToken = resetToken;
-    user.resetTokenExpiry = new Date(Date.now() + expiryMinutes * 60 * 1000);
+    user.resetTokenExpiry = new Date(Date.now() + RESET_PASSWORD_WINDOW_MINUTES * MINUTE);
     await user.save();
 
     return {
@@ -216,7 +233,7 @@ const createForgotPasswordToken = async (email) => {
 const resetPasswordByToken = async ({ token, password }) => {
     const user = await User.findOne({
         resetToken: token,
-        // resetTokenExpiry: { $gt: new Date() },
+        resetTokenExpiry: { $gt: new Date() },
     });
 
     if (!user) {
@@ -298,14 +315,53 @@ const inviteTeamMember = async ({ adminUser, payload }) => {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Admin workspace not found');
     }
 
-    if (await User.isEmailTaken(payload.email)) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+    const existing = await User.findOne({ email: payload.email });
+    const invitationToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + INVITATION_WINDOW_MINUTES * MINUTE);
+
+    // Re-invite: the invite was never accepted (link expired, email lost, typo
+    // in the role). Without this, the email is permanently unusable — the check
+    // below would reject it forever and the person could never be invited again.
+    if (existing) {
+        const isResendable =
+            existing.userType === 'member' &&
+            existing.invitationStatus === 'pending' &&
+            String(existing.workspaceId || '') === String(adminUser.workspaceId);
+
+        if (!isResendable) {
+            throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+        }
+
+        existing.name = payload.name;
+        existing.role = payload.role;
+        if (payload.rate !== undefined) existing.rate = payload.rate;
+        existing.resetToken = invitationToken;
+        existing.resetTokenExpiry = resetTokenExpiry;
+        await existing.save();
+
+        const existingWorkspace = await Workspace.findById(adminUser.workspaceId).select('companyName userName');
+        await emailService.sendAddMemberInvitation({
+            to: existing.email,
+            adminName: adminUser.name || 'Admin',
+            workspaceName: existingWorkspace?.companyName || existingWorkspace?.userName || 'Workspace',
+            token: invitationToken,
+        });
+
+        return {
+            id: existing._id,
+            name: existing.name,
+            email: existing.email,
+            username: existing.username,
+            role: existing.role,
+            rate: existing.rate,
+            userType: existing.userType,
+            workspaceId: existing.workspaceId,
+            isEmailVerified: existing.isEmailVerified,
+            invitationStatus: existing.invitationStatus,
+        };
     }
 
     const username = await generateUniqueUsername(payload.name);
-    const invitationToken = crypto.randomBytes(32).toString('hex');
-    const expiryMinutes = Number(config.jwt.verifyEmailExpirationMinutes) || 60;
-    const resetTokenExpiry = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
     const invitedMember = await User.create({
         name: payload.name,

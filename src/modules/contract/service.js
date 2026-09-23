@@ -122,6 +122,14 @@ const signContract = async ({ token, signatureDataUri, signerName, signerIp }) =
     throw new ApiError(httpStatus.BAD_REQUEST, "A signature and full name are required.");
   }
 
+  // This value is handed straight to Cloudinary, which will happily fetch a
+  // remote URL if given one. Restricting it to an inline image data URI keeps
+  // this public, unauthenticated endpoint from being used to make the server
+  // fetch arbitrary URLs.
+  if (!/^data:image\/(png|jpe?g);base64,/i.test(signatureDataUri)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid signature format.");
+  }
+
   const contract = await Contract.findOne({ signToken: token });
   if (!contract) throw new ApiError(httpStatus.NOT_FOUND, "This link is invalid or has expired.");
   if (contract.status !== "pending") {
