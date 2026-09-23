@@ -1,0 +1,37 @@
+name: CI
+
+# Vercel deploys this repo automatically on every push to main, so this runs
+# as the check that a broken commit gets caught here rather than in production.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+        env:
+          # Placeholder values only. The suite never reaches the database or
+          # sends mail — it exercises middleware, which runs before either.
+          #
+          # JWT_SECRET is required regardless: passport-jwt throws while
+          # constructing its strategy if there's no key, which would crash the
+          # app at import time and fail every test with an unhelpful error.
+          JWT_SECRET: ci-placeholder-secret-not-a-real-key
+          FRONTEND_BASE_URL: https://iris-monde.vercel.app

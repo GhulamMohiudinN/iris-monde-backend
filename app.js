@@ -34,6 +34,13 @@ const allowedOrigins = [
 // cookies, so CORS is not the security boundary — it mainly stops casual
 // cross-origin calls from arbitrary sites. The fallbacks below are deliberate:
 // an unset/stale FRONTEND_BASE_URL must never lock the real frontend out.
+if (!allowedOrigins.length) {
+  console.warn(
+    "[CORS] FRONTEND_BASE_URL is not set — falling back to allowing every origin. " +
+      "Set it so the allow-list actually applies."
+  );
+}
+
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;                  // curl, server-to-server, cron — no Origin header
   if (!allowedOrigins.length) return true;   // nothing configured — don't break the app
