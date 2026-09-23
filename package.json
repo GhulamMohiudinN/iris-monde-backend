@@ -9,7 +9,9 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node --test tests/",
+    "test": "node --test tests/app.test.js tests/security.test.js tests/irisReporting.test.js",
+    "test:isolation": "node --test tests/isolation.test.js",
+    "test:all": "node --test tests/",
     "import:legislation": "node scripts/importLegislationLibrary.js",
     "seed:legislation": "node scripts/seedLegislationLibrary.js",
     "seed:legislation:generated": "node scripts/seedLegislationLibrary.js --source generated",
@@ -39,5 +41,8 @@
     "pizzip": "^3.2.0",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^11.3.0"
   }
 }

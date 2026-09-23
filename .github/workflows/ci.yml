@@ -35,3 +35,32 @@ jobs:
           # app at import time and fail every test with an unhelpful error.
           JWT_SECRET: ci-placeholder-secret-not-a-real-key
           FRONTEND_BASE_URL: https://iris-monde.vercel.app
+
+  isolation:
+    name: Workspace isolation
+    runs-on: ubuntu-latest
+
+    # Kept as its own job because it needs a real MongoDB binary. If that
+    # download ever gets flaky, it fails visibly on its own rather than taking
+    # the fast test gate down with it.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Cache MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tenant data stays separated
+        run: npm run test:isolation
+        env:
+          JWT_SECRET: ci-placeholder-secret-not-a-real-key
