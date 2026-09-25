@@ -1,7 +1,7 @@
 const mongoose  = require("mongoose");
 const httpStatus = require("http-status");
 const ApiError   = require("../../utils/ApiError");
-const { IrisReportingRequirement } = require("./model");
+const { IrisReportingRequirement, deriveApprovalStatus } = require("./model");
 const defaultRequirements          = require("./defaultData");
 const { buildIrisReportingSummary }= require("./summary");
 const { validateRequirement, applyMaterialityRules } = require("./businessRules");
@@ -50,18 +50,28 @@ const getOverview = async ({ workspaceId }) => {
     return { requirements, summary: buildIrisReportingSummary(requirements) };
   }
 
-  // Seed default data on first load
+  // Seed default data on first load.
+  // insertMany skips the pre-save hook, so approvalStatus has to be derived
+  // here — otherwise every seeded obligation stores "not_required" and the
+  // Approvals tab reads empty on a brand-new workspace.
   const seeded = await IrisReportingRequirement.insertMany(
-    defaultRequirements.map((item) => ({
-      workspaceId,
-      ...item,
-      dueDate: normalizeDueDate(item.dueDate),
-      // Give each approval step a proper ObjectId
-      approvalSteps: (item.approvalSteps || []).map((step) => ({
+    defaultRequirements.map((item) => {
+      const approvalSteps = (item.approvalSteps || []).map((step) => ({
         ...step,
-        _id: new mongoose.Types.ObjectId(),
-      })),
-    }))
+        _id: new mongoose.Types.ObjectId(), // give each step a proper ObjectId
+      }));
+
+      return {
+        workspaceId,
+        ...item,
+        dueDate: normalizeDueDate(item.dueDate),
+        approvalSteps,
+        approvalStatus: deriveApprovalStatus({
+          approvalRequired: item.approvalRequired,
+          approvalSteps,
+        }),
+      };
+    })
   );
 
   const requirements = seeded.map((item) => serializeRequirement(item.toObject()));
@@ -459,6 +469,8 @@ const bulkImportFromLibrary = async ({ workspaceId, refs, actor }) => {
       };
       applyMaterialityRules(draft);
 
+      const approvalRequired = Boolean(draft.approvalRequired);
+
       return {
         workspaceId,
         title:              item.title || item.ref,
@@ -470,7 +482,11 @@ const bulkImportFromLibrary = async ({ workspaceId, refs, actor }) => {
         owner:              "",
         reportType:         "Statutory report",
         materiality:        draft.materiality,
-        approvalRequired:   Boolean(draft.approvalRequired),
+        approvalRequired,
+        // insertMany bypasses the pre-save hook — see the note in getOverview.
+        // Critical/High materiality auto-sets approvalRequired, so without this
+        // those imports would claim no approval was needed.
+        approvalStatus:     deriveApprovalStatus({ approvalRequired, approvalSteps: [] }),
         evidenceRequired:   [],
         details:            `Imported from the legislation library (${item.source || "reference library"}).`,
         legislationVersion: "",

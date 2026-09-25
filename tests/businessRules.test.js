@@ -176,6 +176,51 @@ test("critical and high materiality default to requiring approval", () => {
   }
 });
 
+// ─── Approval status derivation ──────────────────────────────────────────────
+// Mongoose skips pre-save hooks on insertMany, so both seeding and bulk import
+// have to derive this themselves. When they didn't, obligations that required
+// approval were stored as "not_required" — the Approvals tab read empty on a
+// new workspace and the table claimed no approval was needed.
+test("approval status is derived from the steps", () => {
+  const { deriveApprovalStatus } = require("../src/modules/irisReporting/model");
+
+  assert.equal(
+    deriveApprovalStatus({ approvalRequired: false, approvalSteps: [] }),
+    "not_required"
+  );
+
+  assert.equal(
+    deriveApprovalStatus({ approvalRequired: true, approvalSteps: [{ status: "pending" }, { status: "approved" }] }),
+    "pending"
+  );
+
+  assert.equal(
+    deriveApprovalStatus({ approvalRequired: true, approvalSteps: [{ status: "approved" }, { status: "approved" }] }),
+    "approved"
+  );
+
+  assert.equal(
+    deriveApprovalStatus({ approvalRequired: true, approvalSteps: [{ status: "approved" }, { status: "rejected" }] }),
+    "rejected"
+  );
+});
+
+test("requiring approval is never reported as 'not required'", () => {
+  const { deriveApprovalStatus } = require("../src/modules/irisReporting/model");
+
+  // No steps defined yet — it still genuinely awaits approval. Reporting
+  // "not_required" here is what hid these from the Approvals tab entirely.
+  assert.equal(
+    deriveApprovalStatus({ approvalRequired: true, approvalSteps: [] }),
+    "pending"
+  );
+  assert.equal(
+    deriveApprovalStatus({ approvalRequired: true }),
+    "pending",
+    "a missing approvalSteps array must not read as not_required"
+  );
+});
+
 test("an explicit approval choice is never overridden", () => {
   const optedOut = { materiality: "Critical", approvalRequired: false };
   applyMaterialityRules(optedOut);

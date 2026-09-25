@@ -104,22 +104,32 @@ const irisRequirementSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+/**
+ * Derives the overall approval state from the individual steps.
+ *
+ * Exported because inserts that bypass the pre-save hook — notably
+ * `insertMany`, which Mongoose does not run `pre("save")` for — still have to
+ * set this. When seeding skipped it, obligations that required approval were
+ * stored as "not_required", so they never appeared in the Approvals tab and
+ * the Approval column claimed no approval was needed.
+ *
+ * An obligation that requires approval is never "not_required", even with no
+ * steps defined yet: it genuinely is awaiting approval, and something has to
+ * be added before it can be satisfied. Rule 6 warns about the missing steps.
+ */
+const deriveApprovalStatus = ({ approvalRequired, approvalSteps } = {}) => {
+  if (!approvalRequired) return "not_required";
+  const steps = approvalSteps || [];
+  if (steps.every((s) => s.status === "approved") && steps.length) return "approved";
+  if (steps.some((s) => s.status === "rejected")) return "rejected";
+  return "pending";
+};
+
 // Compute overall approvalStatus from steps before saving
 irisRequirementSchema.pre("save", function (next) {
-  if (!this.approvalRequired) {
-    this.approvalStatus = "not_required";
-    return next();
-  }
-  const steps = this.approvalSteps || [];
-  if (!steps.length) return next();
-  if (steps.every((s) => s.status === "approved")) {
-    this.approvalStatus = "approved";
-    this.approvedAt = new Date();
-  } else if (steps.some((s) => s.status === "rejected")) {
-    this.approvalStatus = "rejected";
-  } else {
-    this.approvalStatus = "pending";
-  }
+  const next_ = deriveApprovalStatus(this);
+  if (next_ === "approved" && this.approvalStatus !== "approved") this.approvedAt = new Date();
+  this.approvalStatus = next_;
   next();
 });
 
@@ -130,6 +140,7 @@ const IrisReportingRequirement = mongoose.model(
 
 module.exports = {
   IrisReportingRequirement,
+  deriveApprovalStatus,
   IRIS_STATUS,
   APPROVAL_STATUS,
   MATERIALITY,
