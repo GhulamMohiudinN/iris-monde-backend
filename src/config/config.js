@@ -24,6 +24,12 @@ const parseUrls = (value) => {
 
 module.exports = {
   port: process.env.PORT,
+  // Public self-registration. Closed by default: a company is created by a
+  // platform operator, who then invites its administrator. Setting
+  // ALLOW_PUBLIC_SIGNUP=true reopens the endpoint, but note the frontend's
+  // sign-up form was replaced with an "access is by invitation" page, so
+  // reopening this on its own gives you a working API and no form.
+  allowPublicSignup: String(process.env.ALLOW_PUBLIC_SIGNUP || '').toLowerCase() === 'true',
   Frontend_URL: normalizeUrl(process.env.FRONTEND_BASE_URL),
   backendUrl: normalizeUrl(process.env.BACKEND_BASE_URL),
   Frontend_URLs: parseUrls(

@@ -10,7 +10,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "node --test tests/app.test.js tests/security.test.js tests/irisReporting.test.js tests/businessRules.test.js",
-    "test:isolation": "node --test tests/isolation.test.js",
+    "test:isolation": "node --test tests/isolation.test.js tests/platformOnboarding.test.js",
     "test:all": "node --test tests/",
     "import:legislation": "node scripts/importLegislationLibrary.js",
     "seed:legislation": "node scripts/seedLegislationLibrary.js",

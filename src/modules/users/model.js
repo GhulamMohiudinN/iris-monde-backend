@@ -36,8 +36,14 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     userType: {
+      // 'owner'  — platform operator: creates client companies, belongs to no
+      //            workspace, and is never set through the API (see
+      //            scripts/promotePlatformOwner.js). Keeping it script-only
+      //            means no request can escalate a user into it.
+      // 'admin'  — administrator of one workspace.
+      // 'member' — invited into one workspace.
       type: String,
-      enum: ['admin', 'member'],
+      enum: ['owner', 'admin', 'member'],
       default: 'member',
       required: true,
     },

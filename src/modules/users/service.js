@@ -208,7 +208,18 @@ const updateUserById = async (userId, updateBody) => {
     if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
     }
-    Object.assign(user, updateBody);
+
+    // This function assigns whatever it is handed, so the only thing standing
+    // between a request body and the platform role is the Joi schema on each
+    // route that calls it. That is one forgotten stripUnknown away from a
+    // privilege escalation, so the rule lives here too, next to the write.
+    // Granting 'owner' is script-only — see scripts/createPlatformOwner.js.
+    const { userType, ...safeUpdate } = updateBody;
+    if (userType !== undefined && userType !== user.userType) {
+        throw new ApiError(httpStatus.FORBIDDEN, 'userType cannot be changed through this API');
+    }
+
+    Object.assign(user, safeUpdate);
     await user.save();
     return user;
 };
@@ -443,7 +454,11 @@ const acceptInvitationByToken = async ({ token, password }) => {
     const user = await User.findOne({
         resetToken: token,
         resetTokenExpiry: { $gt: new Date() },
-        userType: 'member',
+        // 'admin' is included because a client company's first administrator is
+        // now invited the same way a team member is, and would otherwise be
+        // unable to accept their own invitation. 'owner' stays excluded: the
+        // platform role is only ever granted by script, never by a link.
+        userType: { $in: ['member', 'admin'] },
     });
 
     if (!user) {
@@ -490,6 +505,7 @@ const changeUserPassword = async (userId, { oldPassword, newPassword }) => {
 
 module.exports = {
     createSignUpUser,
+    generateUniqueUsername,
     verifyEmailToken,
     createUser,
     getUserById,

@@ -79,5 +79,39 @@ const isSuperAdmin = () => async (req, res, next) => {
   return checkPermission();
 };
 
+/**
+ * Platform operator guard — the role that creates client companies.
+ *
+ * Deliberately separate from isSuperAdmin rather than an extension of it. A
+ * platform owner belongs to no workspace, so every workspace-scoped route
+ * (which all rely on req.user.workspaceId) must keep rejecting them; and a
+ * workspace admin must never reach the routes that create or list other
+ * companies. Neither role inherits the other.
+ */
+const isPlatformOwner = () => async (req, res, next) => {
+  const checkPermission = () => {
+    if (req.user?.userType === 'owner') {
+      return next();
+    }
+
+    return res.status(httpStatus.FORBIDDEN).send({
+      isSuccess: false,
+      message: 'you have not permission to do this action',
+    });
+  };
+
+  if (!req.user) {
+    return auth()(req, res, (err) => {
+      if (err) {
+        return next(err);
+      }
+      return checkPermission();
+    });
+  }
+
+  return checkPermission();
+};
+
 module.exports = auth;
 module.exports.isSuperAdmin = isSuperAdmin;
+module.exports.isPlatformOwner = isPlatformOwner;

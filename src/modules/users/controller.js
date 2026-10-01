@@ -3,6 +3,7 @@ const ApiError = require("../../utils/ApiError");
 const catchAsync = require("../../utils/catchAsync");
 const userService = require("./service");
 const userValidation = require("./valadition");
+const config = require("../../config/config");
 const {
   workspaceService,
   authService,
@@ -12,6 +13,17 @@ const { logActivity } = require("../activityLog/service");
 const { ACTIVITY_ACTIONS } = require("../activityLog/model");
 
 const signUp = catchAsync(async (req, res) => {
+  // Access is invitation-only: companies are created by a platform operator,
+  // who invites the administrator. Enforced here rather than by unmounting the
+  // route so that the response explains itself instead of returning a 404.
+  if (!config.allowPublicSignup) {
+    return res.status(httpStatus.FORBIDDEN).send({
+      isSuccess: false,
+      message:
+        'Accounts are created by invitation only. Please contact your administrator for access.',
+    });
+  }
+
   const validationResult = userValidation.validateSignUpInputs(req.body);
   if (validationResult?.error) {
     return res.status(httpStatus.BAD_REQUEST).send({
