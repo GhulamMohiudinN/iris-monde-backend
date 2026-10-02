@@ -255,6 +255,11 @@ const resetPasswordByToken = async ({ token, password }) => {
     user.resetToken = '';
     user.resetTokenExpiry = null;
     user.lastActive = new Date();
+    // Clears any brute-force lock. The lockout message tells the user a reset
+    // will get them back in sooner, which has to actually be true — and someone
+    // holding a valid reset token has proved control of the mailbox anyway.
+    user.failedLoginAttempts = 0;
+    user.lockedUntil = null;
     await user.save();
 
     return {

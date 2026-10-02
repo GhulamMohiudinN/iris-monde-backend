@@ -78,6 +78,25 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+
+    // ── Brute-force protection ──────────────────────────────────────────────
+    // Per-account, and deliberately separate from the per-IP rate limiter in
+    // app.js: on serverless each instance keeps its own in-memory counter, so
+    // that limiter is far weaker than it looks. These live in the database and
+    // therefore hold however many instances are running, and they also stop an
+    // attacker spreading attempts across many addresses against one account.
+    failedLoginAttempts: {
+      type: Number,
+      default: 0
+    },
+    lockedUntil: {
+      type: Date,
+      default: null
+    },
+    lastFailedLoginAt: {
+      type: Date,
+      default: null
+    },
   },
   { timestamps: true }
 );
