@@ -72,7 +72,7 @@ const buildInvoiceHtml = ({
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#111827;">
     <h1 style="font-size:24px;margin-bottom:4px;">INVOICE</h1>
     <p style="margin:2px 0;font-size:13px;"><strong>Invoice #:</strong> ${escapeHtml(invoiceNumber)}</p>
-    <p style="margin:2px 0;font-size:13px;"><strong>Issue Date:</strong> ${escapeHtml(issueDate)}</p>
+    ${issueDate ? `<p style="margin:2px 0;font-size:13px;"><strong>Issue Date:</strong> ${escapeHtml(issueDate)}</p>` : ""}
     ${servicePeriod ? `<p style="margin:2px 0;font-size:13px;"><strong>Service Period:</strong> ${escapeHtml(servicePeriod)}</p>` : ""}
 
     <table style="width:100%;margin-top:20px;">

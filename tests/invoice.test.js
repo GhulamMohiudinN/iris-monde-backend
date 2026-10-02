@@ -54,6 +54,19 @@ test("no address means no empty line, not a blank one", () => {
   assert.ok(!html.includes("white-space:pre-line"), "nothing should be emitted for an absent address");
 });
 
+// ─── Header ──────────────────────────────────────────────────────────────────
+test("an omitted issue date leaves no dangling label", () => {
+  // Found by sending a real invoice: the issue date printed its label whether
+  // or not a date was given, so an invoice sent without one carried a bare
+  // "Issue Date:" with nothing after it.
+  const html = buildInvoiceHtml(baseInvoice({ issueDate: "" }));
+  assert.ok(!html.includes("Issue Date"), "no date means the label should not appear at all");
+
+  const withDate = buildInvoiceHtml(baseInvoice({ issueDate: "2026-10-02" }));
+  assert.ok(withDate.includes("Issue Date"), "a date that was given must still be shown");
+  assert.ok(withDate.includes("2026-10-02"));
+});
+
 // ─── Bank details ────────────────────────────────────────────────────────────
 test("every bank field given is shown with its label", () => {
   const html = buildInvoiceHtml(baseInvoice({ bank: fullBank }));
