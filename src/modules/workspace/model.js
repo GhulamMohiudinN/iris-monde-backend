@@ -31,6 +31,19 @@ const WorkspaceSchema = new mongoose.Schema(
         foundedYear: { type: String, default: '' },
         phoneNumber: { type: String, default: '' },
         adminEmail: { type: String, default: '' },
+        // Invoice details. Held on the workspace rather than typed into each
+        // invoice: these are the same on every invoice, and re-keying an
+        // account number per invoice is how money reaches the wrong account.
+        // The invoicing screen prefills from here and can save back to it.
+        billing: {
+            address:       { type: String, default: '' },
+            bankName:      { type: String, default: '' },
+            accountName:   { type: String, default: '' },
+            bsb:           { type: String, default: '' },
+            accountNumber: { type: String, default: '' },
+            swift:         { type: String, default: '' },
+        },
+
         notificationPreferences: {
             email: { type: Boolean, default: true },
             slack: { type: Boolean, default: false },

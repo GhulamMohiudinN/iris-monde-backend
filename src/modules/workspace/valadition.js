@@ -54,6 +54,14 @@ const validateUpdateWorkspaceInputs = (data) => {
         website: Joi.string().optional().allow(''),
         phoneNumber: Joi.string().optional().allow(''),
         primaryWorkflowTypes: Joi.array().items(Joi.string()).optional(),
+        billing: Joi.object({
+            address:       Joi.string().allow('').optional(),
+            bankName:      Joi.string().allow('').optional(),
+            accountName:   Joi.string().allow('').optional(),
+            bsb:           Joi.string().allow('').optional(),
+            accountNumber: Joi.string().allow('').optional(),
+            swift:         Joi.string().allow('').optional(),
+        }).optional(),
         notificationPreferences: Joi.object({
             email: Joi.boolean(),
             slack: Joi.boolean(),
