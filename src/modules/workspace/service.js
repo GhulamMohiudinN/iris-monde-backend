@@ -6,6 +6,9 @@ const { Template } = require('../template/model');
 const DEFAULT_TEMPLATES = require('../template/defaultTemplates');
 const { IrisReportingRequirement } = require('../irisReporting/model');
 const { ReportTemplate } = require('../reportTemplate/model');
+const { Contract } = require('../contract/model');
+const { Step } = require('../step/model');
+const cloudinary = require('cloudinary').v2;
 
 // Shared plan cap shown in the UI (e.g. sidebar "x GB of 10 GB used").
 // No per-workspace plan/billing tiers exist yet, so every workspace is
@@ -232,8 +235,100 @@ const getWorkspaceOverview = async ({ workspaceId }) => {
     };
 };
 
+const isCloudinaryReady = () => {
+    const resolved = cloudinary.config();
+    return !!(resolved.cloud_name && resolved.api_key && resolved.api_secret);
+};
+
+/**
+ * Permanently removes a workspace and everything belonging to it.
+ *
+ * Children are deleted before the workspace itself, so a failure part-way
+ * through leaves the workspace in place and the whole thing can simply be
+ * retried. Deleting the workspace first would strand every remaining record
+ * with no parent and no way to find them again.
+ *
+ * Uploaded files live in Cloudinary rather than Mongo, so clearing the
+ * database alone would leave a client's evidence sitting in storage after
+ * they were told it had been deleted. They are removed too, but on a
+ * best-effort basis: Cloudinary being unreachable must not block the
+ * deletion the user asked for, so failures are counted and reported rather
+ * than thrown.
+ */
+const deleteWorkspaceAndData = async (workspaceId) => {
+    const workspace = await Workspace.findById(workspaceId);
+    if (!workspace) return null;
+
+    // Collect every uploaded asset before the records holding the ids are gone.
+    const publicIds = [];
+    const obligations = await IrisReportingRequirement.find({ workspaceId })
+        .select('evidenceFiles.publicId')
+        .lean();
+    for (const item of obligations) {
+        for (const file of item.evidenceFiles || []) {
+            if (file.publicId) publicIds.push(file.publicId);
+        }
+    }
+    const reportTemplates = await ReportTemplate.find({ workspaceId }).select('publicId').lean();
+    for (const tpl of reportTemplates) {
+        if (tpl.publicId) publicIds.push(tpl.publicId);
+    }
+
+    let filesDeleted = 0;
+    let filesFailed = 0;
+    if (publicIds.length && isCloudinaryReady()) {
+        for (const publicId of publicIds) {
+            try {
+                await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' });
+                filesDeleted += 1;
+            } catch (err) {
+                filesFailed += 1;
+                console.error(`[workspace] could not remove ${publicId} from storage: ${err.message}`);
+            }
+        }
+    } else if (publicIds.length) {
+        filesFailed = publicIds.length;
+        console.warn('[workspace] storage is not configured — uploaded files were left in place');
+    }
+
+    const scoped = { workspaceId };
+    const [obligationsDeleted, contracts, processes, steps, templates, reportTpls, logs, users] =
+        await Promise.all([
+            IrisReportingRequirement.deleteMany(scoped),
+            Contract.deleteMany(scoped),
+            Process.deleteMany(scoped),
+            Step.deleteMany(scoped),
+            Template.deleteMany(scoped),
+            ReportTemplate.deleteMany(scoped),
+            ActivityLog.deleteMany(scoped),
+            // Every member including the administrator. Leaving them behind
+            // would strand accounts that can no longer reach any workspace and,
+            // with self-registration closed, could never create another.
+            User.deleteMany(scoped),
+        ]);
+
+    await Workspace.deleteOne({ _id: workspaceId });
+
+    return {
+        companyName: workspace.companyName || workspace.userName,
+        removed: {
+            obligations: obligationsDeleted.deletedCount,
+            contracts: contracts.deletedCount,
+            processes: processes.deletedCount,
+            steps: steps.deletedCount,
+            templates: templates.deletedCount,
+            reportTemplates: reportTpls.deletedCount,
+            activityLogs: logs.deletedCount,
+            users: users.deletedCount,
+            files: filesDeleted,
+            filesFailed,
+        },
+    };
+};
+
 module.exports = {
     createNewWorkspace,
+    deleteWorkspaceAndData,
     getPopulatedWorkspace,
     updateWorkspaceById,
     getWorkspaceChanges,

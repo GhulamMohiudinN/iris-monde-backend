@@ -21,6 +21,7 @@ const API_ROUTES = {
     CREATE_WORKSPACE: "/createWorkspace",
     UPDATE_WORKSPACE: "/updateWorkspace",
     GET_USER_WORKSPACE: "/getUserWorkspace",
+    DELETE_WORKSPACE: "/deleteWorkspace",
     ADD_MEMBER: "/addMember",
     SEND_ADD_MEMBER_EMAIL: "/sendAddMemberEmail",
     VERIFY_INVITE: "/verify-invite",

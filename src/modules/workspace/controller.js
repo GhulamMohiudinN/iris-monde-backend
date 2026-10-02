@@ -158,8 +158,46 @@ const workspaceOverview = catchAsync(async (req, res) => {
     });
 });
 
+/**
+ * Deletes the caller's own workspace and everything in it.
+ *
+ * The workspace name is required in the body and must match. The settings
+ * screen already asks the user to type it, but that check lives in the
+ * browser: without repeating it here, anything holding a valid admin token
+ * could destroy a workspace with a bare request and no confirmation at all.
+ */
+const deleteWorkspace = catchAsync(async (req, res) => {
+    const workspaceId = req.user?.workspaceId;
+    if (!workspaceId) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'You do not belong to a workspace');
+    }
+
+    const workspace = await workspaceService.getWorkspaceById(workspaceId);
+    if (!workspace) {
+        throw new ApiError(httpStatus.NOT_FOUND, 'Workspace not found');
+    }
+
+    const expected = workspace.companyName || workspace.userName || '';
+    const provided = String(req.body?.confirmName || '').trim();
+    if (!provided || provided !== expected) {
+        throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `To confirm, send the workspace name exactly as it appears: "${expected}"`
+        );
+    }
+
+    const result = await workspaceService.deleteWorkspaceAndData(workspaceId);
+
+    return res.send({
+        success: true,
+        message: `${result.companyName} and all of its data have been permanently deleted.`,
+        ...result,
+    });
+});
+
 module.exports = {
     createWorkspace,
+    deleteWorkspace,
     updateWorkspace,
     getUserWorkspace,
     addMember,
