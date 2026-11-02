@@ -86,8 +86,26 @@ async function main() {
 
     existing.userType = "owner";
     existing.workspaceId = null;
+    // The create branch below sets these; promotion used to skip them, which
+    // left a promoted operator refused at sign-in with "please verify your
+    // email" and no way to obtain a verification link — those were only ever
+    // sent by public sign-up, which is closed. An operator created deliberately
+    // by whoever runs this script does not need to prove the address again.
+    existing.isEmailVerified = true;
+    existing.invitationStatus = "accepted";
+
+    // And give them a way in. Promotion used to send nothing at all, so someone
+    // promoted from an account they had never signed into had no password and
+    // no means of setting one.
+    const promotionToken = crypto.randomBytes(32).toString("hex");
+    existing.resetToken = promotionToken;
+    existing.resetTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await existing.save();
+
+    await emailService.sendResetPasswordEmail(existing.email, promotionToken);
+
     console.log(`\n✅ ${email} promoted to platform operator.`);
+    console.log(`   An email has been sent so they can set their own password (valid 24 hours).`);
     await mongoose.disconnect();
     return;
   }

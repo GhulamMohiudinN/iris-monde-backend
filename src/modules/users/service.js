@@ -260,6 +260,13 @@ const resetPasswordByToken = async ({ token, password }) => {
     // holding a valid reset token has proved control of the mailbox anyway.
     user.failedLoginAttempts = 0;
     user.lockedUntil = null;
+    // Following a reset link proves control of the mailbox, which is the only
+    // thing email verification ever established. Marking it here is not a
+    // shortcut, it is the same proof arriving by a different route — and it is
+    // now the only route: verification emails were sent solely by public
+    // sign-up, which is closed, so without this an unverified account can never
+    // become verified and its owner is locked out permanently.
+    user.isEmailVerified = true;
     await user.save();
 
     return {
