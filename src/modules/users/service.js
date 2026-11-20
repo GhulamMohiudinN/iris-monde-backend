@@ -214,9 +214,16 @@ const updateUserById = async (userId, updateBody) => {
     // route that calls it. That is one forgotten stripUnknown away from a
     // privilege escalation, so the rule lives here too, next to the write.
     // Granting 'owner' is script-only — see scripts/createPlatformOwner.js.
-    const { userType, ...safeUpdate } = updateBody;
+    const { userType, role, ...safeUpdate } = updateBody;
     if (userType !== undefined && userType !== user.userType) {
         throw new ApiError(httpStatus.FORBIDDEN, 'userType cannot be changed through this API');
+    }
+    // Role now carries real permission — a member with role 'admin' administers
+    // the workspace — so a user setting their own role would be a Viewer making
+    // themselves an Admin. Roles are changed only by a workspace admin, through
+    // updateTeamMemberBySuperAdmin, which never comes through here.
+    if (role !== undefined && role !== user.role) {
+        throw new ApiError(httpStatus.FORBIDDEN, 'Your role can only be changed by a workspace admin');
     }
 
     Object.assign(user, safeUpdate);
@@ -323,13 +330,33 @@ const getUsersByWorkspaceId = async ({ workspaceId, page = 1, limit = 10, role, 
     };
 };
 
-const deleteUserById = async (userId) => {
-    const user = await User.findById(userId);
+/**
+ * Removes a team member from the caller's own workspace.
+ *
+ * This used to delete whatever user id it was given. Nothing checked that the
+ * target belonged to the caller's workspace, so an admin of one company could
+ * delete users of another — their administrators included — or the platform
+ * operator, or the owner of their own workspace. A user outside the caller's
+ * workspace is reported as not found, so the response does not confirm that
+ * the id exists somewhere else.
+ */
+const deleteUserById = async (userId, actor) => {
+    if (!actor?.workspaceId) {
+        throw new ApiError(httpStatus.FORBIDDEN, 'You do not belong to a workspace');
+    }
+
+    const user = await User.findOne({ _id: userId, workspaceId: actor.workspaceId });
     if (!user) {
         throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
     }
+    if (String(user._id) === String(actor._id)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'You cannot remove yourself from the workspace');
+    }
+    if (user.userType !== 'member') {
+        throw new ApiError(httpStatus.FORBIDDEN, 'The owner of a workspace cannot be removed from it');
+    }
 
-    await User.findByIdAndDelete(userId);
+    await User.deleteOne({ _id: user._id });
     return { id: userId };
 };
 

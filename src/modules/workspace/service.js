@@ -8,7 +8,7 @@ const { IrisReportingRequirement } = require('../irisReporting/model');
 const { ReportTemplate } = require('../reportTemplate/model');
 const { Contract } = require('../contract/model');
 const { Step } = require('../step/model');
-const cloudinary = require('cloudinary').v2;
+const { isCloudinaryReady, describeAsset, destroyAsset } = require('../../utils/cloudinaryAsset');
 
 // Shared plan cap shown in the UI (e.g. sidebar "x GB of 10 GB used").
 // No per-workspace plan/billing tiers exist yet, so every workspace is
@@ -235,11 +235,6 @@ const getWorkspaceOverview = async ({ workspaceId }) => {
     };
 };
 
-const isCloudinaryReady = () => {
-    const resolved = cloudinary.config();
-    return !!(resolved.cloud_name && resolved.api_key && resolved.api_secret);
-};
-
 /**
  * Permanently removes a workspace and everything belonging to it.
  *
@@ -260,34 +255,45 @@ const deleteWorkspaceAndData = async (workspaceId) => {
     if (!workspace) return null;
 
     // Collect every uploaded asset before the records holding the ids are gone.
-    const publicIds = [];
+    // The URL is kept alongside the id because it is the only record of whether
+    // the file was stored as an image or a raw file, and destroy() needs that.
+    const assets = [];
     const obligations = await IrisReportingRequirement.find({ workspaceId })
-        .select('evidenceFiles.publicId')
+        .select('evidenceFiles.url evidenceFiles.publicId')
         .lean();
     for (const item of obligations) {
         for (const file of item.evidenceFiles || []) {
-            if (file.publicId) publicIds.push(file.publicId);
+            if (file.url) assets.push({ url: file.url, publicId: file.publicId });
         }
     }
-    const reportTemplates = await ReportTemplate.find({ workspaceId }).select('publicId').lean();
+    const reportTemplates = await ReportTemplate.find({ workspaceId }).select('url publicId').lean();
     for (const tpl of reportTemplates) {
-        if (tpl.publicId) publicIds.push(tpl.publicId);
+        if (tpl.url) assets.push({ url: tpl.url, publicId: tpl.publicId });
+    }
+    const contractFiles = await Contract.find({ workspaceId }).select('document signature').lean();
+    for (const c of contractFiles) {
+        if (c.document?.url) assets.push({ url: c.document.url, publicId: c.document.publicId });
+        if (c.signature) assets.push({ url: c.signature, publicId: '' });
     }
 
     let filesDeleted = 0;
     let filesFailed = 0;
-    if (publicIds.length && isCloudinaryReady()) {
-        for (const publicId of publicIds) {
+    const stored = assets.filter((a) => describeAsset(a.url, a.publicId));
+    if (stored.length && isCloudinaryReady()) {
+        for (const asset of stored) {
             try {
-                await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' });
-                filesDeleted += 1;
+                // Counted only when storage confirms it. This previously called
+                // destroy() with resource_type "auto", which Cloudinary answers
+                // with "not found" rather than an error — so every file was
+                // counted as deleted while nothing was removed at all.
+                if (await destroyAsset(asset.url, asset.publicId)) filesDeleted += 1;
             } catch (err) {
                 filesFailed += 1;
-                console.error(`[workspace] could not remove ${publicId} from storage: ${err.message}`);
+                console.error(`[workspace] could not remove ${asset.publicId} from storage: ${err.message}`);
             }
         }
-    } else if (publicIds.length) {
-        filesFailed = publicIds.length;
+    } else if (stored.length) {
+        filesFailed = stored.length;
         console.warn('[workspace] storage is not configured — uploaded files were left in place');
     }
 

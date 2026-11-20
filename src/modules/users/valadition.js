@@ -77,8 +77,9 @@ const validateResetPasswordInputs = (data) => {
 
 const validateUpdateUserInputs = (data) => {
     const schema = Joi.object({
+        // role is deliberately absent: it grants permissions, so a user may not
+        // set their own. stripUnknown drops it if a client still sends it.
         name: Joi.string().trim().min(2).optional(),
-        role: Joi.string().valid('admin', 'viewer', 'editor').optional(),
     }).min(1); // Ensure at least one field is provided
 
     const result = schema.validate(data, { abortEarly: false, stripUnknown: true });

@@ -9,6 +9,12 @@ const { sendContractSignRequest, sendContractSignedNotification } = require("../
 
 // ─── Cloudinary setup (same pattern as IRIS evidence / report templates) ──────
 const cloudinary = require("cloudinary").v2;
+const {
+  uploadOptions,
+  describeAsset,
+  signedDownloadUrl,
+  destroyAsset,
+} = require("../../utils/cloudinaryAsset");
 if (process.env.CLOUDINARY_URL) {
   cloudinary.config({ url: process.env.CLOUDINARY_URL });
 } else if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
@@ -23,10 +29,37 @@ const isCloudinaryReady = () => {
   return !!(resolved.cloud_name && resolved.api_key && resolved.api_secret);
 };
 
+// The stored URL is never sent out: links are minted per request and expire,
+// so a contract document is not readable forever by whoever once saw the link.
+const documentSummary = (c) =>
+  c.document?.url
+    ? {
+        fileName: c.document.fileName,
+        fileType: c.document.fileType,
+        fileSize: c.document.fileSize,
+        sha256:   c.document.sha256,
+      }
+    : null;
+
+const documentLinks = (c) => {
+  if (!c.document?.url) return null;
+  if (c.document.url.startsWith("data:")) {
+    return { fileName: c.document.fileName, dataUrl: c.document.url };
+  }
+  const asset = describeAsset(c.document.url, c.document.publicId);
+  if (!asset) return null;
+  return {
+    fileName:    c.document.fileName,
+    viewUrl:     signedDownloadUrl(asset, { attachment: false }),
+    downloadUrl: signedDownloadUrl(asset, { attachment: true }),
+  };
+};
+
 const publicFields = (c) => ({
   id:             c._id,
   title:          c.title,
   content:        c.content,
+  document:       documentSummary(c),
   recipientName:  c.recipientName,
   ownerName:      c.ownerName,
   status:         c.status,
@@ -36,18 +69,48 @@ const publicFields = (c) => ({
 });
 
 // ─── Create + send ──────────────────────────────────────────────────────────
-const createContract = async ({ workspaceId, payload, actor }) => {
-  const { title, content, recipientName, recipientEmail } = payload;
-  if (!title?.trim() || !content?.trim() || !recipientName?.trim() || !recipientEmail?.trim()) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "title, content, recipientName and recipientEmail are required");
+const uploadContractDocument = async (file) => {
+  const sha256 = crypto.createHash("sha256").update(file.buffer).digest("hex");
+  const base = {
+    fileName: file.originalname,
+    fileType: file.mimetype,
+    fileSize: file.size,
+    sha256,
+  };
+
+  if (!isCloudinaryReady()) {
+    console.warn("[Contract] Cloudinary not configured — storing document as base64 (dev fallback)");
+    return { ...base, url: `data:${file.mimetype};base64,${file.buffer.toString("base64")}`, publicId: "" };
   }
+
+  const result = await cloudinary.uploader.upload(
+    `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
+    uploadOptions(file.originalname, process.env.CLOUDINARY_CONTRACT_FOLDER || "contracts")
+  );
+  return { ...base, url: result.secure_url || result.url, publicId: result.public_id };
+};
+
+const createContract = async ({ workspaceId, payload, actor, file }) => {
+  const { title, content, recipientName, recipientEmail } = payload;
+  if (!title?.trim() || !recipientName?.trim() || !recipientEmail?.trim()) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "title, recipientName and recipientEmail are required");
+  }
+  if (!content?.trim() && !file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Add the contract terms, attach a document, or both");
+  }
+
+  // Uploaded before the record exists, so a failed upload sends nothing and
+  // leaves nothing behind — the recipient never gets a link to a contract
+  // whose document is missing.
+  const document = file ? await uploadContractDocument(file) : undefined;
 
   const signToken = crypto.randomBytes(24).toString("hex");
 
   const contract = await Contract.create({
     workspaceId,
     title:          title.trim(),
-    content:        content.trim(),
+    content:        (content || "").trim(),
+    document,
     recipientName:  recipientName.trim(),
     recipientEmail: recipientEmail.trim().toLowerCase(),
     ownerName:      actor?.name || "",
@@ -75,17 +138,28 @@ const createContract = async ({ workspaceId, payload, actor }) => {
     data: { title: contract.title, recipientEmail: contract.recipientEmail },
   });
 
-  return contract.toObject();
+  const created = contract.toObject();
+  return { ...created, document: documentSummary(created) };
 };
 
 // ─── List / Get (workspace-scoped, authenticated) ────────────────────────────
-const listContracts = async ({ workspaceId }) =>
-  Contract.find({ workspaceId }).sort({ createdAt: -1 }).lean();
+const listContracts = async ({ workspaceId }) => {
+  const contracts = await Contract.find({ workspaceId }).sort({ createdAt: -1 }).lean();
+  return contracts.map((c) => ({ ...c, document: documentSummary(c) }));
+};
 
 const getContract = async ({ workspaceId, contractId }) => {
   const contract = await Contract.findOne({ _id: contractId, workspaceId }).lean();
   if (!contract) throw new ApiError(httpStatus.NOT_FOUND, "Contract not found");
-  return contract;
+  return { ...contract, document: documentSummary(contract), documentLinks: documentLinks(contract) };
+};
+
+const getContractDocumentLinks = async ({ workspaceId, contractId }) => {
+  const contract = await Contract.findOne({ _id: contractId, workspaceId }).lean();
+  if (!contract) throw new ApiError(httpStatus.NOT_FOUND, "Contract not found");
+  const links = documentLinks(contract);
+  if (!links) throw new ApiError(httpStatus.NOT_FOUND, "This contract has no attached document");
+  return links;
 };
 
 const deleteContract = async ({ workspaceId, contractId, actor }) => {
@@ -93,6 +167,14 @@ const deleteContract = async ({ workspaceId, contractId, actor }) => {
   if (!contract) throw new ApiError(httpStatus.NOT_FOUND, "Contract not found");
   if (contract.status === "signed") {
     throw new ApiError(httpStatus.BAD_REQUEST, "A signed contract cannot be deleted — it's the record of what was agreed to.");
+  }
+
+  if (contract.document?.url) {
+    try {
+      await destroyAsset(contract.document.url, contract.document.publicId);
+    } catch (err) {
+      console.warn("[Contract] could not remove document from storage:", err.message);
+    }
   }
 
   await Contract.deleteOne({ _id: contractId });
@@ -115,6 +197,16 @@ const getPublicContract = async ({ token }) => {
   const contract = await Contract.findOne({ signToken: token });
   if (!contract) throw new ApiError(httpStatus.NOT_FOUND, "This link is invalid or has expired.");
   return publicFields(contract);
+};
+
+// Fetched when the signer clicks, not when the page loads, so someone who reads
+// for a while before opening the file does not hit an expired link.
+const getPublicDocumentLinks = async ({ token }) => {
+  const contract = await Contract.findOne({ signToken: token }).lean();
+  if (!contract) throw new ApiError(httpStatus.NOT_FOUND, "This link is invalid or has expired.");
+  const links = documentLinks(contract);
+  if (!links) throw new ApiError(httpStatus.NOT_FOUND, "This contract has no attached document");
+  return links;
 };
 
 const signContract = async ({ token, signatureDataUri, signerName, signerIp }) => {
@@ -184,7 +276,9 @@ module.exports = {
   createContract,
   listContracts,
   getContract,
+  getContractDocumentLinks,
   deleteContract,
   getPublicContract,
+  getPublicDocumentLinks,
   signContract,
 };

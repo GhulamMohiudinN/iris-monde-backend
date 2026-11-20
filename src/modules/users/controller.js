@@ -277,7 +277,7 @@ const deleteUser = catchAsync(async (req, res) => {
     });
   }
 
-  await userService.deleteUserById(validationResult.value.userId);
+  await userService.deleteUserById(validationResult.value.userId, req.user);
 
   await logActivity({
     workspaceId: req.user.workspaceId,

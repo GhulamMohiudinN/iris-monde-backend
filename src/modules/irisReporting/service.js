@@ -23,6 +23,13 @@ if (process.env.CLOUDINARY_URL) {
   });
 }
 
+const {
+  uploadOptions,
+  describeAsset,
+  signedDownloadUrl,
+  destroyAsset,
+} = require("../../utils/cloudinaryAsset");
+
 const isCloudinaryReady = () => {
   const resolved = cloudinary.config();
   return !!(resolved.cloud_name && resolved.api_key && resolved.api_secret);
@@ -312,10 +319,12 @@ const uploadEvidenceFile = async ({ workspaceId, requirementId, fileBuffer, file
 
   if (isCloudinaryReady()) {
     const dataUri    = `data:${fileType};base64,${fileBuffer.toString("base64")}`;
-    const result     = await cloudinary.uploader.upload(dataUri, {
-      folder:        process.env.CLOUDINARY_FOLDER || "iris_reporting",
-      resource_type: "auto",
-    });
+    // Not "auto": that filed PDFs as images, which Cloudinary refuses to
+    // deliver by default — see utils/cloudinaryAsset.js.
+    const result     = await cloudinary.uploader.upload(
+      dataUri,
+      uploadOptions(fileName, process.env.CLOUDINARY_FOLDER || "iris_reporting")
+    );
     fileUrl  = result.secure_url || result.url;
     publicId = result.public_id;
   } else {
@@ -366,7 +375,19 @@ const getEvidenceFile = async ({ workspaceId, requirementId, fileId }) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Evidence file not found");
   }
   const file = req.evidenceFiles[0];
-  return { fileName: file.fileName, fileType: file.fileType, url: file.url, publicId: file.publicId };
+  const asset = describeAsset(file.url, file.publicId);
+
+  // Development fallback: the file itself is in the record as a data URI.
+  if (!asset) {
+    return { fileName: file.fileName, fileType: file.fileType, dataUrl: file.url };
+  }
+
+  return {
+    fileName:    file.fileName,
+    fileType:    file.fileType,
+    downloadUrl: signedDownloadUrl(asset, { attachment: true }),
+    viewUrl:     signedDownloadUrl(asset, { attachment: false }),
+  };
 };
 
 // ─── Delete Evidence File ─────────────────────────────────────────────────────
@@ -375,9 +396,9 @@ const deleteEvidenceFile = async ({ workspaceId, requirementId, fileId, actor })
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
 
   const file = req.evidenceFiles.find((f) => f._id.toString() === fileId);
-  if (file?.publicId && isCloudinaryReady()) {
+  if (file) {
     try {
-      await cloudinary.uploader.destroy(file.publicId, { resource_type: "auto" });
+      await destroyAsset(file.url, file.publicId);
     } catch (err) {
       console.warn("[IRIS] Cloudinary delete error:", err.message);
     }

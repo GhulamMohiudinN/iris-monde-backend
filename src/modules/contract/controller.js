@@ -6,8 +6,26 @@ const workspaceId = (req) => req.user?.workspaceId || req.user?.workspace?._id;
 
 // ── Authenticated ─────────────────────────────────────────────────────────────
 const createContract = catchAsync(async (req, res) => {
-  const contract = await svc.createContract({ workspaceId: workspaceId(req), payload: req.body, actor: req.user });
+  const contract = await svc.createContract({
+    workspaceId: workspaceId(req),
+    payload: req.body,
+    actor: req.user,
+    file: req.file,
+  });
   res.status(httpStatus.CREATED).json({ success: true, contract });
+});
+
+const getContractDocument = catchAsync(async (req, res) => {
+  const links = await svc.getContractDocumentLinks({
+    workspaceId: workspaceId(req),
+    contractId: req.params.contractId,
+  });
+  res.status(httpStatus.OK).json({ success: true, links });
+});
+
+const getPublicDocument = catchAsync(async (req, res) => {
+  const links = await svc.getPublicDocumentLinks({ token: req.params.token });
+  res.status(httpStatus.OK).json({ success: true, links });
 });
 
 const listContracts = catchAsync(async (req, res) => {
@@ -49,4 +67,6 @@ module.exports = {
   deleteContract,
   getPublicContract,
   signContract,
+  getContractDocument,
+  getPublicDocument,
 };

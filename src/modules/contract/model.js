@@ -12,7 +12,21 @@ const contractSchema = new mongoose.Schema(
     },
 
     title:   { type: String, required: true, trim: true },
-    content: { type: String, required: true, trim: true },
+    // Either typed terms, an attached document, or both. The service enforces
+    // that at least one is present; the schema allows either to be empty.
+    content: { type: String, default: "", trim: true },
+
+    // An uploaded PDF or Word file for the recipient to read before signing.
+    // sha256 is taken at upload and never changes, so the signed record states
+    // exactly which file was agreed to — there is no route that replaces it.
+    document: {
+      fileName: { type: String, default: "" },
+      fileType: { type: String, default: "" },
+      fileSize: { type: Number, default: 0 },
+      url:      { type: String, default: "" },
+      publicId: { type: String, default: "" },
+      sha256:   { type: String, default: "" },
+    },
 
     recipientName:  { type: String, required: true, trim: true },
     recipientEmail: { type: String, required: true, trim: true, lowercase: true },

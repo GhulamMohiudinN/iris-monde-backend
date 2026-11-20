@@ -55,9 +55,23 @@ const auth = () => async (req, res, next) => {
   }
 };
 
+/**
+ * Who administers a workspace: its owner, or a team member invited with the
+ * Admin role.
+ *
+ * This used to accept userType 'admin' only — the person who created the
+ * workspace. But the invite screen offers Admin as a role, and the menu shows
+ * Invoicing, Contracts and the rest to anyone with role 'admin'. So a teammate
+ * invited as Admin saw every admin feature in the menu and was refused by every
+ * one of them. Platform operators stay excluded: they hold no workspace.
+ */
+const isWorkspaceAdmin = (user) =>
+  user?.userType === 'admin' ||
+  (user?.userType === 'member' && user?.role === 'admin' && !!user?.workspaceId);
+
 const isSuperAdmin = () => async (req, res, next) => {
   const checkPermission = () => {
-    if (req.user?.userType === 'admin') {
+    if (isWorkspaceAdmin(req.user)) {
       return next();
     }
 
@@ -112,6 +126,37 @@ const isPlatformOwner = () => async (req, res, next) => {
   return checkPermission();
 };
 
+/**
+ * The person who owns the workspace, as opposed to an admin they invited.
+ * Reserved for actions an invited admin must not be able to take against the
+ * owner — creating a workspace, and deleting one with everyone in it.
+ */
+const isWorkspaceOwner = () => async (req, res, next) => {
+  const checkPermission = () => {
+    if (req.user?.userType === 'admin') {
+      return next();
+    }
+
+    return res.status(httpStatus.FORBIDDEN).send({
+      isSuccess: false,
+      message: 'Only the owner of this workspace can do that',
+    });
+  };
+
+  if (!req.user) {
+    return auth()(req, res, (err) => {
+      if (err) {
+        return next(err);
+      }
+      return checkPermission();
+    });
+  }
+
+  return checkPermission();
+};
+
 module.exports = auth;
 module.exports.isSuperAdmin = isSuperAdmin;
+module.exports.isWorkspaceAdmin = isWorkspaceAdmin;
+module.exports.isWorkspaceOwner = isWorkspaceOwner;
 module.exports.isPlatformOwner = isPlatformOwner;
