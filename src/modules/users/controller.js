@@ -223,6 +223,31 @@ const changePassword = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * The signed-in user's own profile. Both profile screens called this path,
+ * but no route served it — they silently fell back to whatever the browser had
+ * cached at sign-in, so details like "member since" never appeared.
+ */
+const getMyProfile = catchAsync(async (req, res) => {
+  const user = req.user;
+  return res.send({
+    success: true,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      username: user.username,
+      userType: user.userType,
+      role: user.role,
+      isEmailVerified: user.isEmailVerified,
+      workspaceId: user.workspaceId,
+      workspaceName: req.workspace?.companyName || "",
+      lastLoggedIn: user.lastLoggedIn,
+      createdAt: user.createdAt,
+    },
+  });
+});
+
 const updateUser = catchAsync(async (req, res) => {
   const validationResult = userValidation.validateUpdateUserInputs(req.body);
   if (validationResult?.error) {
@@ -414,4 +439,5 @@ module.exports = {
   updateTeamMember,
   acceptInvitation,
   changePassword,
+  getMyProfile,
 };

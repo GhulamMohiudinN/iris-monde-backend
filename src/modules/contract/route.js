@@ -18,11 +18,12 @@ const router = express.Router();
 const guard = [auth(), isSuperAdmin()];
 
 router
-  // Authenticated — sender's side
+  // Admin only — sender's side. Reading was open to any signed-in member, so
+  // an Editor or Viewer could list every contract and download its document.
   .post("/",                  ...guard, upload.single("document"), ctrl.createContract)
-  .get("/",                   auth(),   ctrl.listContracts)
-  .get("/:contractId",        auth(),   ctrl.getContract)
-  .get("/:contractId/document", auth(), ctrl.getContractDocument)
+  .get("/",                   ...guard, ctrl.listContracts)
+  .get("/:contractId",        ...guard, ctrl.getContract)
+  .get("/:contractId/document", ...guard, ctrl.getContractDocument)
   .delete("/:contractId",     ...guard, ctrl.deleteContract)
 
   // Public — the signer never logs in, the link token is the authorization

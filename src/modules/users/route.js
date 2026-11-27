@@ -15,6 +15,7 @@ router
     .post('/invite-team-members', auth(), isSuperAdmin(), userController.inviteTeamMember)
     .patch('/update-team-members/:userId', auth(), isSuperAdmin(), userController.updateTeamMember)
     .get('/workspace-users', auth(), userController.getWorkspaceUsers)
+    .get('/profile', auth(), userController.getMyProfile)
     .patch('/update-user', auth(), userController.updateUser)
     .post('/change-password', auth(), userController.changePassword)
     .delete('/delete-user/:userId', auth(), isSuperAdmin(), userController.deleteUser)

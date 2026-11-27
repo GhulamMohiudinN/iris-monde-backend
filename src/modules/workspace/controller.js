@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const { isWorkspaceAdmin } = require('../../middlewares/auth');
 const ApiError = require('../../utils/ApiError');
 const catchAsync = require('../../utils/catchAsync');
 const workspaceService = require('./service');
@@ -93,6 +94,13 @@ const updateWorkspace = catchAsync(async (req, res) => {
     });
 });
 
+const withoutBillingUnlessAdmin = (workspace, user) => {
+    if (!workspace || isWorkspaceAdmin(user)) return workspace;
+    const plain = typeof workspace.toObject === 'function' ? workspace.toObject() : { ...workspace };
+    delete plain.billing;
+    return plain;
+};
+
 const getUserWorkspace = catchAsync(async (req, res) => {
     if (!req.user?.workspaceId || !req.workspace) {
         return res.status(httpStatus.NOT_FOUND).send({
@@ -103,7 +111,10 @@ const getUserWorkspace = catchAsync(async (req, res) => {
 
     return res.send({
         success: true,
-        workspace: req.workspace,
+        // Bank details are for admins preparing invoices. Editors and Viewers
+        // get the workspace without them — they were previously sent to every
+        // member, read-only Viewers included.
+        workspace: withoutBillingUnlessAdmin(req.workspace, req.user),
     });
 });
 
