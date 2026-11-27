@@ -512,6 +512,15 @@ const acceptInvitationByToken = async ({ token, password }) => {
     user.lastActive = new Date();
     await user.save();
 
+    await require('../notification/service').notifyWorkspaceAdmins({
+        workspaceId: user.workspaceId,
+        excludeUserId: user._id,
+        type: 'invitation_accepted',
+        title: `${user.name || user.email} joined the workspace`,
+        message: user.email,
+        link: '/users',
+    });
+
     return {
         id: user._id,
         name: user.name,

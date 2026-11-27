@@ -8,6 +8,7 @@ const { validateRequirement, applyMaterialityRules } = require("./businessRules"
 const { logActivity } = require("../activityLog/service");
 const { ACTIVITY_ACTIONS } = require("../activityLog/model");
 const { sendEmail } = require("../../services/email.service");
+const notificationService = require("../notification/service");
 
 const REMINDER_WINDOW_DAYS = 3;
 
@@ -143,13 +144,38 @@ const createRequirement = async ({ workspaceId, payload, actor }) => {
     data: { title: requirement.title, status: requirement.status, materiality: requirement.materiality },
   });
 
+  await notifyOwnerAssigned(workspaceId, requirement, actor);
+
   return serializeRequirement(requirement.toObject());
+};
+
+/** Tells an obligation's owner it is theirs. Never fails the save. */
+const notifyOwnerAssigned = async (workspaceId, requirement, actor) => {
+  try {
+    const ownerId = await notificationService.userIdByEmail(workspaceId, requirement.ownerEmail);
+    if (!ownerId) return;
+    const due = requirement.dueDate
+      ? new Date(requirement.dueDate).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })
+      : "";
+    await notificationService.notifyUsers({
+      workspaceId,
+      userIds:       [ownerId],
+      excludeUserId: actor?._id,
+      type:          "obligation_assigned",
+      title:         `You own "${requirement.title}"`,
+      message:       due ? `Due ${due}` : "",
+      link:          "/iris-reporting",
+    });
+  } catch (err) {
+    console.error("[IRIS] owner notification failed:", err.message);
+  }
 };
 
 // ─── Update Requirement ───────────────────────────────────────────────────────
 const updateRequirement = async ({ workspaceId, requirementId, payload, actor }) => {
   const req = await IrisReportingRequirement.findOne({ _id: requirementId, workspaceId });
   if (!req) throw new ApiError(httpStatus.NOT_FOUND, "Reporting requirement not found");
+  const previousOwnerEmail = (req.ownerEmail || "").toLowerCase();
 
   // Build the merged state to validate against
   const merged = {
@@ -202,6 +228,11 @@ const updateRequirement = async ({ workspaceId, requirementId, payload, actor })
     data: { title: req.title, status: req.status },
   });
 
+  // Only when ownership actually changed hands, not on every edit.
+  if ((req.ownerEmail || "").toLowerCase() !== previousOwnerEmail) {
+    await notifyOwnerAssigned(workspaceId, req, actor);
+  }
+
   return serializeRequirement(req.toObject());
 };
 
@@ -251,6 +282,22 @@ const decideApprovalStep = async ({ workspaceId, requirementId, stepId, decision
     message: `${actor?.name || actor?.email || decidedBy || "Someone"} ${decision} approval step "${step.stepName}" on "${req.title}"`,
     data: { stepName: step.stepName, decision, notes: notes || "" },
   });
+
+  try {
+    const ownerId = await notificationService.userIdByEmail(workspaceId, req.ownerEmail);
+    const adminIds = await notificationService.workspaceAdminIds(workspaceId);
+    await notificationService.notifyUsers({
+      workspaceId,
+      userIds:       [...adminIds, ownerId],
+      excludeUserId: actor?._id,
+      type:          "approval_decided",
+      title:         `${step.stepName} ${decision} — ${req.title}`,
+      message:       `By ${decidedBy || actor?.name || "a reviewer"}${notes ? `: ${notes}` : ""}`,
+      link:          "/iris-reporting",
+    });
+  } catch (err) {
+    console.error("[IRIS] approval notification failed:", err.message);
+  }
 
   return serializeRequirement(req.toObject());
 };
@@ -571,6 +618,18 @@ const sendDueDateReminders = async () => {
         `— Iris Monde`;
 
       await sendEmail(item.ownerEmail, subject, text);
+
+      const ownerId = await notificationService.userIdByEmail(item.workspaceId, item.ownerEmail);
+      if (ownerId) {
+        await notificationService.notifyUsers({
+          workspaceId: item.workspaceId,
+          userIds:     [ownerId],
+          type:        "due_date_reminder",
+          title:       subject,
+          message:     item.legislationRef || "",
+          link:        "/iris-reporting",
+        });
+      }
 
       item.reminderSentAt = now;
       await item.save();

@@ -180,3 +180,47 @@ test("an admin cannot change a member of another company", async () => {
   );
   assert.equal((await User.findById(globexMember._id)).role, "viewer");
 });
+
+// ─── Role matrix ─────────────────────────────────────────────────────────────
+// The invite screen promises: Admin — full access; Editor — create and edit
+// processes, not manage users; Viewer — read-only access to all processes.
+const { effectiveRole, requireRole } = require("../src/middlewares/auth");
+
+test("each account resolves to the right workspace role", () => {
+  assert.equal(effectiveRole(acmeOwner), "admin");
+  assert.equal(effectiveRole(acmeAdmin), "admin");
+  assert.equal(effectiveRole(acmeEditor), "editor");
+  assert.equal(effectiveRole(globexMember), "viewer");
+  assert.equal(effectiveRole(operator), null, "an operator has no workspace role");
+});
+
+test("editors can create and edit processes; viewers cannot", async () => {
+  const editGuard = () => requireRole("admin", "editor");
+  assert.deepEqual(await runGuard(editGuard, acmeEditor), { allowed: true });
+  assert.deepEqual(await runGuard(editGuard, acmeOwner), { allowed: true });
+
+  const viewer = await runGuard(editGuard, globexMember);
+  assert.equal(viewer.allowed, false, "a viewer is read-only");
+  assert.equal(viewer.code, 403);
+});
+
+test("all three roles can view processes; an operator cannot", async () => {
+  const viewGuard = () => requireRole("admin", "editor", "viewer");
+  for (const user of [acmeOwner, acmeAdmin, acmeEditor, globexMember]) {
+    assert.deepEqual(await runGuard(viewGuard, user), { allowed: true }, `${user.role} should see processes`);
+  }
+  assert.equal((await runGuard(viewGuard, operator)).allowed, false);
+});
+
+test("editors still cannot reach admin-only features", async () => {
+  // Users, company settings, IRIS, invoices, contracts and logs stay admin-only.
+  const result = await runGuard(isSuperAdmin, acmeEditor);
+  assert.equal(result.allowed, false);
+  assert.equal(result.code, 403);
+});
+
+test("an unknown or missing role grants nothing", () => {
+  assert.equal(effectiveRole({ userType: "member", role: "superuser", workspaceId: ACME }), null);
+  assert.equal(effectiveRole({ userType: "member", workspaceId: ACME }), null);
+  assert.equal(effectiveRole(null), null);
+});

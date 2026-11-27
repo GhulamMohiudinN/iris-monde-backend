@@ -1,3 +1,4 @@
+const { isWorkspaceAdmin } = require("../../middlewares/auth");
 const httpStatus = require("http-status");
 const ApiError = require("../../utils/ApiError");
 const { Step } = require("./model");
@@ -7,6 +8,38 @@ const {
   buildAuditChanges,
   addProcessAudit,
 } = require("../process/audit");
+const notificationService = require("../notification/service");
+
+/**
+ * Tells each assignee about the steps just given to them — one notification
+ * per person, however many steps, so assigning a whole process does not bury
+ * someone in a notification per step. Never fails the save that triggered it.
+ */
+const notifyStepAssignees = async ({ workspaceId, steps, processId, processName, actor }) => {
+  try {
+    const byAssignee = new Map();
+    for (const step of steps || []) {
+      if (!step?.assignee) continue;
+      const key = String(step.assignee._id || step.assignee);
+      byAssignee.set(key, [...(byAssignee.get(key) || []), step]);
+    }
+    for (const [userId, assigned] of byAssignee) {
+      await notificationService.notifyUsers({
+        workspaceId,
+        userIds:       [userId],
+        excludeUserId: actor?._id,
+        type:          "step_assigned",
+        title:         assigned.length === 1
+          ? `Step assigned to you: ${assigned[0].title}`
+          : `${assigned.length} steps assigned to you`,
+        message:       `In "${processName || "a process"}"${actor?.name ? `, from ${actor.name}` : ""}`,
+        link:          `/processes/${processId}`,
+      });
+    }
+  } catch (err) {
+    console.error("[step] assignment notification failed:", err.message);
+  }
+};
 
 const createStepForProcess = async ({ workspaceId, payload, actor }) => {
   const process = await Process.findOne({
@@ -41,6 +74,10 @@ const createStepForProcess = async ({ workspaceId, payload, actor }) => {
       { field: "title", oldValue: null, newValue: step.title },
       { field: "status", oldValue: null, newValue: step.status },
     ],
+  });
+
+  await notifyStepAssignees({
+    workspaceId, steps: [step], processId: process._id, processName: process.name, actor,
   });
 
   return Step.findById(step._id).populate(
@@ -86,6 +123,8 @@ const createStepsForProcess = async ({
       ],
     });
   }
+
+  await notifyStepAssignees({ workspaceId, steps: createdSteps, processId, processName, actor });
 
   return createdSteps;
 };
@@ -153,6 +192,13 @@ const updateStepById = async ({ stepId, workspaceId, payload, actor }) => {
     });
   }
 
+  if (after.assignee && after.assignee !== before.assignee) {
+    const process = await Process.findOne({ _id: step.processId, workspaceId }).select("name").lean();
+    await notifyStepAssignees({
+      workspaceId, steps: [step], processId: step.processId, processName: process?.name, actor,
+    });
+  }
+
   return Step.findById(step._id).populate(
     "assignee",
     "name email role userType",
@@ -206,7 +252,9 @@ const completeStepById = async ({ stepId, workspaceId, actor }) => {
   // Check if user is assignee or admin
   const isAssignee =
     step.assignee && String(step.assignee) === String(actor._id);
-  const isAdmin = actor.userType === "admin";
+  // Any workspace admin, including a member invited as Admin. This used to
+  // check userType only, so an invited admin could not complete steps.
+  const isAdmin = isWorkspaceAdmin(actor);
 
   if (!isAssignee && !isAdmin) {
     throw new ApiError(

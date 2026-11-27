@@ -12,6 +12,7 @@ const reportTemplate = require("../modules/reportTemplate/route");
 const ai = require("../modules/ai/route");
 const contract = require("../modules/contract/route");
 const platform = require("../modules/platform/route");
+const notification = require("../modules/notification/route");
 
 module.exports = (app) => {
   const apiV1Router = express.Router();
@@ -28,6 +29,7 @@ module.exports = (app) => {
   apiV1Router.use("/ai", ai);
   apiV1Router.use("/contracts", contract);
   apiV1Router.use("/platform", platform);
+  apiV1Router.use("/notifications", notification);
 
   app.use("/api/v1", apiV1Router);
 };

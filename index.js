@@ -8,6 +8,8 @@ const { createServer } = require("http");
 const { Server } = require("socket.io");
 const app = require("./app.js");
 const config = require("./src/config/config.js");
+const jwt = require("jsonwebtoken");
+const { setIo, roomForUser } = require("./src/services/realtime");
 
 // Connect to MongoDB
 mongoose
@@ -27,12 +29,26 @@ if (require.main === module) {
     transports: ["websocket", "polling"],
   });
 
-  io.on("connection", (socket) => {
-    console.log("Socket connected:", socket.id);
-    socket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", socket.id, reason);
-    });
+  // Only signed-in users may connect, and each joins only their own room —
+  // the identity comes from the verified token, never from anything the
+  // browser claims. Previously any client could connect without logging in.
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token || "";
+      const payload = jwt.verify(token, config.secrets.jwtSecretKey);
+      socket.userId = String(payload.userId);
+      return next();
+    } catch (err) {
+      return next(new Error("unauthorized"));
+    }
   });
+
+  io.on("connection", (socket) => {
+    socket.join(roomForUser(socket.userId));
+    socket.on("disconnect", () => {});
+  });
+
+  setIo(io);
 
   // ── Graceful error handler — catches EADDRINUSE so nodemon doesn't loop ──
   server.on("error", (err) => {

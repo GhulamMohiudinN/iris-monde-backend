@@ -155,8 +155,58 @@ const isWorkspaceOwner = () => async (req, res, next) => {
   return checkPermission();
 };
 
+/**
+ * A user's permission level inside their workspace: 'admin', 'editor',
+ * 'viewer', or null for anyone who has no workspace (platform operators,
+ * accounts that never finished setup).
+ *
+ * The workspace owner and any member invited as Admin are both 'admin'.
+ */
+const effectiveRole = (user) => {
+  if (!user?.workspaceId) return null;
+  if (isWorkspaceAdmin(user)) return 'admin';
+  if (user.userType === 'member' && ['editor', 'viewer'].includes(user.role)) return user.role;
+  return null;
+};
+
+/**
+ * Allows only the listed workspace roles.
+ *
+ * The roles are described to users on the invite screen — Editor "can create
+ * & edit processes but not manage users", Viewer "read-only access to all
+ * processes" — and these guards are what make those descriptions true. Before
+ * this, every process and template change was admin-only, so an Editor could
+ * not do the one thing their role promised, and a Viewer could see only the
+ * processes they happened to be assigned to.
+ */
+const requireRole = (...roles) => async (req, res, next) => {
+  const checkPermission = () => {
+    if (roles.includes(effectiveRole(req.user))) {
+      return next();
+    }
+
+    return res.status(httpStatus.FORBIDDEN).send({
+      isSuccess: false,
+      message: 'Your role does not allow this action',
+    });
+  };
+
+  if (!req.user) {
+    return auth()(req, res, (err) => {
+      if (err) {
+        return next(err);
+      }
+      return checkPermission();
+    });
+  }
+
+  return checkPermission();
+};
+
 module.exports = auth;
 module.exports.isSuperAdmin = isSuperAdmin;
+module.exports.effectiveRole = effectiveRole;
+module.exports.requireRole = requireRole;
 module.exports.isWorkspaceAdmin = isWorkspaceAdmin;
 module.exports.isWorkspaceOwner = isWorkspaceOwner;
 module.exports.isPlatformOwner = isPlatformOwner;

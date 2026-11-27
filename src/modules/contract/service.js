@@ -3,6 +3,7 @@ const httpStatus = require("http-status");
 const ApiError = require("../../utils/ApiError");
 const config = require("../../config/config");
 const { Contract } = require("./model");
+const notificationService = require("../notification/service");
 const { logActivity } = require("../activityLog/service");
 const { ACTIVITY_ACTIONS } = require("../activityLog/model");
 const { sendContractSignRequest, sendContractSignedNotification } = require("../../services/email.service");
@@ -253,6 +254,15 @@ const signContract = async ({ token, signatureDataUri, signerName, signerIp }) =
     title:      contract.title,
     signerName: contract.signerName,
     contractsUrl,
+  });
+
+  await notificationService.notifyUsers({
+    workspaceId: contract.workspaceId,
+    userIds:     [contract.createdBy],
+    type:        "contract_signed",
+    title:       `"${contract.title}" was signed`,
+    message:     `Signed by ${contract.signerName}`,
+    link:        "/contracts",
   });
 
   // The signer is an external party with no User account, so there's no real
